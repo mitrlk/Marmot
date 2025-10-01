@@ -49,17 +49,14 @@ namespace Marmot::Materials {
     // elastic constants
     const double K, G;
 
-    // plasticity parameters
-    const double ft, Q1, Q2, b1, b2, b3, b4, b5;
+    // plasticity parameters -- possibly eta as a separate parameter, instead of fc, for pressure sensitivity
+    const double ft, fc, Q1, Q2, b1, b2, b3, b4, b5;
 
     // strain rate
     const double k0_dot, n;
 
     // viscoplastic flow
     const double nu_plus, nu_minus;
-
-    // pressure dependance
-    const double eta;
 
     // damage
     const double kc;
@@ -92,7 +89,7 @@ namespace Marmot::Materials {
       double&                           alphaP;
 
       RtTsAStateVarManager( double* theStateVarVector )
-        : MarmotStateVarVectorManager( theStateVarVector, layout ), Fp( &find( "Fp" ) ), alphaP( find( "alphaP" ) ) {};
+        : MarmotStateVarVectorManager( theStateVarVector, layout ), Fp( &find( "Fp" ) ), alphaP( find( "alphaP" ) ){};
     };
     std::unique_ptr< RtTsAStateVarManager > stateVars;
 
@@ -101,6 +98,10 @@ namespace Marmot::Materials {
     StateView getStateView( const std::string& result );
 
     void initializeYourself();
+
+    // ------------------------------------------------------------
+    // Viscoplasticity functions
+    // ------------------------------------------------------------
 
     std::tuple< double, Tensor33d, double > yieldFunction( const Tensor33d& Fe, const double betaP )
     {
@@ -125,24 +126,30 @@ namespace Marmot::Materials {
     std::tuple< double, Tensor33d, Tensor3333d, double > yieldFunctionFromStress( const Tensor33d& mandelStress,
                                                                                   const double     betaP )
     {
+      const double eta = fc / ft;
       Tensor33d    dev = deviatoric( mandelStress );
-      const double rho = std::max( sqrt( Fastor::inner( dev, dev ) ), 1e-15 );
-      const double f   = 1. / fy * ( rho - Marmot::Constants::sqrt2_3 * betaP );
+      const double J2  = std::max( 0.5 * Fastor::inner( dev, dev ), 1e-15 );
+      const double I1  = trace( mandelStress );
+      const double A   = eta - 1.0;
+      const double B   = sqrt( std::pow( A, 2 ) * std::pow( I1, 2 ) + 12.0 * eta * J2 );
 
-      Tensor33d dRho_dMandel = 1. / rho * dev;
+      const double f = ( A * I1 + B ) / ( 2.0 * eta ) - ft - betaP; // = phi( I1, J2 ) - betaP
 
-      Tensor3333d d2Rho_dMandel_dMandel = -1.0 / std::pow( rho, 3 ) * outer( dev, dev ) +
-                                          1. / rho *
-                                            ( einsum< ik, jl, to_ijkl >( Spatial3D::I, Spatial3D::I ) -
-                                              1. / 3 *
-                                                einsum< ij, IK, IL, to_ijKL >( Spatial3D::I,
-                                                                               Spatial3D::I,
-                                                                               Spatial3D::I ) );
+      const double phiI1      = A * ( 1.0 + A * I1 / B ) / ( 2.0 * eta );
+      const double phiJ2      = 3.0 / B;
+      Tensor33d    df_dMandel = phiI1 * Spatial3D::I + phiJ2 * dev;
 
-      Tensor3333d d2f_dMandel_dMandel = 1. / fy * d2Rho_dMandel_dMandel;
-      Tensor33d   df_dMandel          = 1. / fy * dRho_dMandel;
+      const double phiI1I1 = std::pow( A, 2 ) * ( 1.0 / B - std::pow( A * I1, 2 ) / std::pow( B, 3 ) ) / ( 2.0 * eta );
+      const double phiJ2J2 = -18.0 * eta / std::pow( B, 3 );
+      const double phiI1J2 = -3.0 * std::pow( A, 2 ) * I1 / std::pow( B, 3 );
 
-      return { f, df_dMandel, d2f_dMandel_dMandel, -Constants::sqrt2_3 / fy };
+      Tensor3333d d2f_dMandel_dMandel = phiI1I1 * Spatial3D::I4 +
+                                        2.0 * phiI1J2 * einsum< ij, kl, to_ijkl >( Spatial3D::I, dev ) +
+                                        phiJ2J2 * einsum< ij, kl, to_ijkl >( dev, dev ) +
+                                        phiJ2 * ( Spatial3D::ISymm - 1.0 / 3.0 * Spatial3D::I4 );
+      double df_dBetaP = -1.0;
+
+      return { f, df_dMandel, d2f_dMandel_dMandel, df_dBetaP };
     }
 
     bool isYielding( const Tensor33d& Fe, const double betaP )
@@ -181,8 +188,10 @@ namespace Marmot::Materials {
 
     std::tuple< double, double > computeBetaP( const double alphaP )
     {
-      const double beta           = ft + Q1 * alphaP * exp( -b1 * alphaP ) + Q2 * ( 1.0 - exp( -b2 * alphaP)) + b3 * pow(alphaP, 3) + b4 * pow(alphaP, 2) + b5 * alphaP;
-      const double dBetaP_dAlphaP = Q1 * exp( -b1 * alphaP ) * ( 1.0 - b1 * alphaP ) + Q2 * b2 * exp( -b2 * alphaP ) + 3.0 * b3 * pow(alphaP, 2) + 2.0 * b4 * alphaP + b5;
+      const double beta = ft + Q1 * alphaP * exp( -b1 * alphaP ) + Q2 * ( 1.0 - exp( -b2 * alphaP ) ) +
+                          b3 * pow( alphaP, 3 ) + b4 * pow( alphaP, 2 ) + b5 * alphaP;
+      const double dBetaP_dAlphaP = Q1 * exp( -b1 * alphaP ) * ( 1.0 - b1 * alphaP ) + Q2 * b2 * exp( -b2 * alphaP ) +
+                                    3.0 * b3 * pow( alphaP, 2 ) + 2.0 * b4 * alphaP + b5;
       return { beta, dBetaP_dAlphaP };
     }
 
