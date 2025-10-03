@@ -28,8 +28,8 @@ namespace Marmot::Materials {
       b5( materialProperties[10] ),
       k0_dot( materialProperties[11] ),
       n( materialProperties[12] ),
-      nu_plus( materialProperties[13] ),
-      nu_minus( materialProperties[14] ),
+      nuP_plus( materialProperties[13] ),
+      nuP_minus( materialProperties[14] ),
       kc( materialProperties[15] ),
       density( nMaterialProperties > 16 ? materialProperties[16] : 0.0 ) // TODO: make mandatory material parameter
   {
@@ -45,10 +45,10 @@ namespace Marmot::Materials {
     const Tensor33d FpOld( Fp );
     double&         alphaP    = stateVars->alphaP;
     const double    alphaPOld = alphaP;
-    double&         alphaD    = stateVars->alphaD;
-    const double    alphaDOld = alphaD;
-    double&         omega     = stateVars->omega;
-    const double    omegaOld  = omega;
+    //  double&         alphaD    = stateVars->alphaD;
+    //  const double    alphaDOld = alphaD;
+    //  double&         omega     = stateVars->omega;
+    //  const double    omegaOld  = omega;
 
     using namespace Marmot;
     using namespace Fastor;
