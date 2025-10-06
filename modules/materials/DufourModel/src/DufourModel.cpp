@@ -71,14 +71,14 @@ namespace Marmot::Materials {
 
       using mV9d = Eigen::Map< Eigen::Matrix< double, 9, 1 > >;
       VectorXd X( 11 );
-      X.segment( 0, 9 )  = mV9d( FeTrial.data() );
-      X( 9 )             = alphaPOld;
-      X( 10 )            = 0;
+      X.segment( 0, 9 ) = mV9d( FeTrial.data() );
+      X( 9 )            = alphaPOld;
+      // X( 10 )            = 0;
       VectorXd        dX = VectorXd::Zero( 11 );
       VectorXd        R  = VectorXd::Zero( 11 );
       Eigen::MatrixXd dR_dX( 11, 11 );
 
-      std::tie( R, dR_dX ) = computeResidualVectorAndTangent( X, FeTrial, alphaPOld );
+      std::tie( R, dR_dX ) = computeResidualVectorAndTangent( X, FeTrial, alphaPOld, timeIncrement.dT );
 
       while ( R.norm() > 1e-12 || dX.norm() > 1e-12 ) {
 
@@ -87,7 +87,7 @@ namespace Marmot::Materials {
 
         dX = -dR_dX.colPivHouseholderQr().solve( R );
         X += dX;
-        std::tie( R, dR_dX ) = computeResidualVectorAndTangent( X, FeTrial, alphaPOld );
+        std::tie( R, dR_dX ) = computeResidualVectorAndTangent( X, FeTrial, alphaPOld, timeIncrement.dT );
         counter += 1;
       }
       /* std::cout << "inner newton iters: " << counter << std::endl; */

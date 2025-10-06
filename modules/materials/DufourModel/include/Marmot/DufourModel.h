@@ -111,21 +111,26 @@ namespace Marmot::Materials {
       std::tie( mandelStress, dMandel_dFe ) = computeMandelStress( Fe );
 
       double      f;
+      double      dLambda;
       Tensor33d   df_dMandel;
       Tensor33d   df_dFe;
       double      df_dBetaP;
       Tensor33d   dg_dMandel;
       Tensor3333d d2g_dMandel_dMandel;
 
-      std::tie( f, df_dMandel, df_dBetaP, dg_dMandel, d2g_dMandel_dMandel ) = yieldFunctionFromStress( mandelStress,
-                                                                                                       betaP );
+      std::tie( f,
+                df_dMandel,
+                df_dBetaP,
+                dg_dMandel,
+                d2g_dMandel_dMandel,
+                dLambda ) = yieldFunctionFromStress( mandelStress, betaP );
 
       df_dFe = einsum< IJ, IJKL >( df_dMandel, dMandel_dFe );
 
       return { f, df_dFe, df_dBetaP, dg_dMandel };
     }
 
-    std::tuple< double, Tensor33d, double, Tensor33d, Tensor3333d > yieldFunctionFromStress(
+    std::tuple< double, Tensor33d, double, Tensor33d, Tensor3333d, double > yieldFunctionFromStress(
       const Tensor33d& mandelStress,
       const double     betaP )
     {
@@ -175,7 +180,17 @@ namespace Marmot::Materials {
 
       Tensor3333d d2g_dMandel_dMandel = dQ_dMandel / ( 2.0 * g ) - Fastor::outer( Q, Q ) / ( 4.0 * g * g * g );
 
-      return { f, df_dMandel, df_dBetaP, dg_dMandel, d2g_dMandel_dMandel };
+      double dLambda;
+      double h = sqrt( 2.0 * Fastor::inner( dg_dMandel, dg_dMandel ) / 3.0 );
+
+      if ( f > 0.0 ) {
+        dLambda = eta_VP * std::pow( ( Math::macauly( f ) / betaP ), ( 1.0 / n ) ) / h;
+      }
+      else {
+        dLambda = 0.0;
+      }
+
+      return { f, df_dMandel, df_dBetaP, dg_dMandel, d2g_dMandel_dMandel, dLambda };
     }
 
     bool isYielding( const Tensor33d& Fe, const double betaP )
@@ -223,7 +238,8 @@ namespace Marmot::Materials {
 
     std::tuple< Eigen::VectorXd, Eigen::MatrixXd > computeResidualVectorAndTangent( const Eigen::VectorXd& X,
                                                                                     const Tensor33d&       FeTrial,
-                                                                                    const double           alphaPTrial )
+                                                                                    const double           alphaPTrial,
+                                                                                    const double           dt )
     {
 
       const int idxA = 9;
@@ -240,8 +256,9 @@ namespace Marmot::Materials {
 
       Tensor33d Fe( X.segment( 0, 9 ).data() );
 
-      const double dLambda = X( 10 );
-      const double alphaP  = X( 9 );
+      double dLambda;
+      // const double dLambda = X( 10 );
+      const double alphaP = X( 9 );
 
       double betaP, dBetaP_dAlphaP;
       std::tie( betaP, dBetaP_dAlphaP ) = computeBetaP( alphaP );
@@ -253,16 +270,20 @@ namespace Marmot::Materials {
 
       double    f, df_dBetaP;
       Tensor33d df_dMandel, dg_dMandel;
-      std::tie( f, df_dMandel, df_dBetaP, dg_dMandel, d2g_dMandel_dMandel ) = yieldFunctionFromStress( mandelStress,
-                                                                                                       betaP );
+      std::tie( f,
+                df_dMandel,
+                df_dBetaP,
+                dg_dMandel,
+                d2g_dMandel_dMandel,
+                dLambda ) = yieldFunctionFromStress( mandelStress, betaP );
 
-      Tensor33d   dGp = dLambda * dg_dMandel;
+      Tensor33d   dGp = dt * dLambda * dg_dMandel;
       Tensor33d   dFp;
       Tensor3333d ddFp_ddGp;
       std::tie( dFp, ddFp_ddGp ) = ContinuumMechanics::FiniteStrain::Plasticity::FlowIntegration::FirstOrderDerived::
         exponentialMap( dGp );
 
-      Tensor3333d ddGp_dFe      = dLambda * einsum< ijmn, mnkL >( d2g_dMandel_dMandel, dMandel_dFe );
+      Tensor3333d ddGp_dFe      = dt * dLambda * einsum< ijmn, mnkL >( d2g_dMandel_dMandel, dMandel_dFe );
       Tensor33d   ddFp_ddLambda = einsum< IJKL, KL >( ddFp_ddGp, dg_dMandel );
 
       Tensor3333d ddFp_dFe = einsum< iImn, mnkL >( ddFp_ddGp, ddGp_dFe );
@@ -277,8 +298,8 @@ namespace Marmot::Materials {
       df_dFe                                       = einsum< IJ, IJKL >( df_dMandel, dMandel_dFe );
 
       R.segment< 9 >( 0 ) += mV9d( Tensor33d( einsum< iJ, JK >( Fe, dFp ) ).data() );
-      R( idxA ) += ( alphaP + dLambda * df_dBetaP );
-      R( idxF )
+      R( idxA ) += ( alphaP + dt * dLambda * df_dBetaP );
+      // R( idxF )
       // R( idxF ) = f;
 
       dR_dX.block< 9, 9 >( 0, 0 ) = mM9d( dFeTrial_dFe.data() ).transpose();
