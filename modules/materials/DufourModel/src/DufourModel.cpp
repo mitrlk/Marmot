@@ -26,7 +26,7 @@ namespace Marmot::Materials {
       b3( materialProperties[8] ),
       b4( materialProperties[9] ),
       b5( materialProperties[10] ),
-      k0_dot( materialProperties[11] ),
+      eta_VP( materialProperties[11] ),
       n( materialProperties[12] ),
       nuP_plus( materialProperties[13] ),
       nuP_minus( materialProperties[14] ),
