@@ -116,16 +116,21 @@ namespace Marmot::Materials {
       Tensor33d   df_dFe;
       double      df_dBetaP;
       Tensor33d   dg_dMandel;
+      Tensor3333d d2g_dMandel_dMandel;
 
-      std::tie( f, df_dMandel, d2f_dMandel_dMandel, df_dBetaP, dg_dMandel ) = yieldFunctionFromStress( mandelStress,
-                                                                                                       betaP );
+      std::tie( f,
+                df_dMandel,
+                d2f_dMandel_dMandel,
+                df_dBetaP,
+                dg_dMandel,
+                d2g_dMandel_dMandel ) = yieldFunctionFromStress( mandelStress, betaP );
 
       df_dFe = einsum< IJ, IJKL >( df_dMandel, dMandel_dFe );
 
       return { f, df_dFe, df_dBetaP, dg_dMandel };
     }
 
-    std::tuple< double, Tensor33d, Tensor3333d, double, Tensor33d > yieldFunctionFromStress(
+    std::tuple< double, Tensor33d, Tensor3333d, double, Tensor33d, Tensor3333d > yieldFunctionFromStress(
       const Tensor33d& mandelStress,
       const double     betaP )
     {
@@ -161,11 +166,20 @@ namespace Marmot::Materials {
                                          thetaMinus * Math::macauly( -p ) * Math::macauly( -p ),
                                        1e-15 ) );
 
-      Tensor33d dg_dMandel = ( 3.0 * dev + 2.0 * ( thetaPlus * Math::macauly( p ) - thetaMinus * Math::macauly( -p ) ) *
-                                             Spatial3D::I / 3.0 ) /
-                             ( 2.0 * g );
+      Tensor33d Q = 3.0 * dev +
+                    2.0 * ( thetaPlus * Math::macauly( p ) - thetaMinus * Math::macauly( -p ) ) * Spatial3D::I / 3.0;
 
-      return { f, df_dMandel, d2f_dMandel_dMandel, df_dBetaP, dg_dMandel };
+      Tensor3333d dQ_dMandel = 3.0 * ( Spatial3D::ISymm - Spatial3D::I4 / 3.0 ) +
+                               2.0 *
+                                 ( thetaPlus * Math::heavisideExclude0( p ) +
+                                   thetaMinus * Math::heavisideExclude0( -p ) ) *
+                                 Spatial3D::I4 / 9.0;
+
+      Tensor33d dg_dMandel = Q / ( 2.0 * g );
+
+      Tensor3333d d2g_dMandel_dMandel = dQ_dMandel / ( 2.0 * g ) - Fastor::outer( Q, Q ) / ( 4.0 * g * g * g );
+
+      return { f, df_dMandel, d2f_dMandel_dMandel, df_dBetaP, dg_dMandel, d2g_dMandel_dMandel };
     }
 
     bool isYielding( const Tensor33d& Fe, const double betaP )
@@ -238,13 +252,17 @@ namespace Marmot::Materials {
 
       // compute mandel stress
       Tensor33d   mandelStress;
-      Tensor3333d dMandel_dFe, d2f_dMandel_dMandel;
+      Tensor3333d dMandel_dFe, d2f_dMandel_dMandel, d2g_dMandel_dMandel;
       std::tie( mandelStress, dMandel_dFe ) = computeMandelStress( Fe );
 
       double    f, df_dBetaP;
       Tensor33d df_dMandel, dg_dMandel;
-      std::tie( f, df_dMandel, d2f_dMandel_dMandel, df_dBetaP, dg_dMandel ) = yieldFunctionFromStress( mandelStress,
-                                                                                                       betaP );
+      std::tie( f,
+                df_dMandel,
+                d2f_dMandel_dMandel,
+                df_dBetaP,
+                dg_dMandel,
+                d2g_dMandel_dMandel ) = yieldFunctionFromStress( mandelStress, betaP );
 
       Tensor33d   dGp = dLambda * dg_dMandel;
       Tensor33d   dFp;
@@ -252,8 +270,8 @@ namespace Marmot::Materials {
       std::tie( dFp, ddFp_ddGp ) = ContinuumMechanics::FiniteStrain::Plasticity::FlowIntegration::FirstOrderDerived::
         exponentialMap( dGp );
 
-      Tensor3333d ddGp_dFe      = dLambda * einsum< ijmn, mnkL >( d2f_dMandel_dMandel, dMandel_dFe );
-      Tensor33d   ddFp_ddLambda = einsum< IJKL, KL >( ddFp_ddGp, df_dMandel );
+      Tensor3333d ddGp_dFe      = dLambda * einsum< ijmn, mnkL >( d2g_dMandel_dMandel, dMandel_dFe );
+      Tensor33d   ddFp_ddLambda = einsum< IJKL, KL >( ddFp_ddGp, dg_dMandel );
 
       Tensor3333d ddFp_dFe = einsum< iImn, mnkL >( ddFp_ddGp, ddGp_dFe );
 
@@ -261,8 +279,6 @@ namespace Marmot::Materials {
                                  einsum< IK, JL, to_IJKL >( Spatial3D::I, transpose( Spatial3D::I % dFp ) );
 
       Tensor33d dFe_ddLambda = einsum< Ii, iJ >( Fe, ddFp_ddLambda );
-
-      df_dBetaP = -1.0;
 
       Tensor33d df_dFe                             = einsum< IJ, IJKL >( df_dMandel, dMandel_dFe );
       std::tie( f, df_dFe, df_dBetaP, dg_dMandel ) = yieldFunction( Fe, betaP );
