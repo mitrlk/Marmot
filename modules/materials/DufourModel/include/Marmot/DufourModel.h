@@ -42,7 +42,7 @@ namespace Marmot::Materials {
   using namespace FastorStandardTensors;
   using namespace FastorIndices;
 
-  class RtTsA : public MarmotMaterialFiniteStrain {
+  class DufourModel : public MarmotMaterialFiniteStrain {
   public:
     using MarmotMaterialFiniteStrain::MarmotMaterialFiniteStrain;
 
@@ -64,18 +64,18 @@ namespace Marmot::Materials {
     // mass properties;
     const double density;
 
-    RtTsA( const double* materialProperties, int nMaterialProperties, int materialLabel );
+    DufourModel( const double* materialProperties, int nMaterialProperties, int materialLabel );
 
     void computeStress( ConstitutiveResponse< 3 >& response,
                         AlgorithmicModuli< 3 >&    tangents,
                         const Deformation< 3 >&    deformation,
                         const TimeIncrement&       timeIncrement );
 
-    int getNumberOfRequiredStateVars() { return RtTsAStateVarManager::layout.nRequiredStateVars; }
+    int getNumberOfRequiredStateVars() { return DufourModelStateVarManager::layout.nRequiredStateVars; }
 
     double getDensity() { return density; }
 
-    class RtTsAStateVarManager : public MarmotStateVarVectorManager {
+    class DufourModelStateVarManager : public MarmotStateVarVectorManager {
 
     public:
       inline const static auto layout = makeLayout( {
@@ -88,10 +88,10 @@ namespace Marmot::Materials {
       Fastor::TensorMap< double, 3, 3 > Fp;
       double&                           alphaP;
 
-      RtTsAStateVarManager( double* theStateVarVector )
+      DufourModelStateVarManager( double* theStateVarVector )
         : MarmotStateVarVectorManager( theStateVarVector, layout ), Fp( &find( "Fp" ) ), alphaP( find( "alphaP" ) ){};
     };
-    std::unique_ptr< RtTsAStateVarManager > stateVars;
+    std::unique_ptr< DufourModelStateVarManager > stateVars;
 
     void assignStateVars( double* stateVars, int nStateVars );
 

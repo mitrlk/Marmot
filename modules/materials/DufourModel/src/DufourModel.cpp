@@ -1,4 +1,4 @@
-#include "Marmot/RtTsA.h"
+#include "Marmot/DufourModel.h"
 #include "Marmot/MarmotDeformationMeasures.h"
 #include "Marmot/MarmotEnergyDensityFunctions.h"
 #include "Marmot/MarmotFastorTensorBasics.h"
@@ -13,7 +13,7 @@ namespace Marmot::Materials {
   using namespace FastorIndices;
   using namespace FastorStandardTensors;
 
-  RtTsA::RtTsA( const double* materialProperties, int nMaterialProperties, int materialLabel )
+  DufourModel::DufourModel( const double* materialProperties, int nMaterialProperties, int materialLabel )
     : MarmotMaterialFiniteStrain( materialProperties, nMaterialProperties, materialLabel ),
       K( materialProperties[0] ),
       G( materialProperties[1] ),
@@ -35,10 +35,10 @@ namespace Marmot::Materials {
   {
   }
 
-  void RtTsA::computeStress( ConstitutiveResponse< 3 >& response,
-                             AlgorithmicModuli< 3 >&    tangents,
-                             const Deformation< 3 >&    deformation,
-                             const TimeIncrement&       timeIncrement )
+  void DufourModel::computeStress( ConstitutiveResponse< 3 >& response,
+                                   AlgorithmicModuli< 3 >&    tangents,
+                                   const Deformation< 3 >&    deformation,
+                                   const TimeIncrement&       timeIncrement )
   {
 
     auto&           Fp = stateVars->Fp;
@@ -171,22 +171,22 @@ namespace Marmot::Materials {
     }
   }
 
-  StateView RtTsA::getStateView( const std::string& stateName )
+  StateView DufourModel::getStateView( const std::string& stateName )
   {
     return stateVars->getStateView( stateName );
   }
 
-  void RtTsA::assignStateVars( double* stateVars_, int nStateVars )
+  void DufourModel::assignStateVars( double* stateVars_, int nStateVars )
   {
     if ( nStateVars < getNumberOfRequiredStateVars() )
       throw std::invalid_argument( MakeString() << __PRETTY_FUNCTION__
                                                 << ": Not sufficient "
                                                    "stateVars!" );
 
-    this->stateVars = std::make_unique< RtTsAStateVarManager >( stateVars_ );
+    this->stateVars = std::make_unique< DufourModelStateVarManager >( stateVars_ );
   }
 
-  void RtTsA::initializeYourself()
+  void DufourModel::initializeYourself()
   {
     stateVars->Fp.eye();
   }
