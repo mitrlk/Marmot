@@ -1,5 +1,5 @@
-#include "Marmot/RtTsA.h"
 #include "Marmot/MarmotMaterialRegistrationHelper.h"
+#include "Marmot/RtTsA.h"
 
 namespace Marmot::Materials {
 
@@ -10,7 +10,6 @@ namespace Marmot::Materials {
     using namespace MarmotLibrary;
 
     const static bool RtTsARegistered = MarmotMaterialFactory::
-      registerMaterial( RtTsACode,
-                        "RtTsA",                        makeDefaultMarmotMaterialFactoryFunction< class RtTsA >() );
+      registerMaterial( RtTsACode, "RtTsA", makeDefaultMarmotMaterialFactoryFunction< class RtTsA >() );
   } // namespace Registration
 } // namespace Marmot::Materials
