@@ -111,19 +111,15 @@ namespace Marmot::Materials {
       std::tie( mandelStress, dMandel_dFe ) = computeMandelStress( Fe );
 
       double      f;
-      double      dLambda;
+      double      h;
       Tensor33d   df_dMandel;
       Tensor33d   df_dFe;
       double      df_dBetaP;
       Tensor33d   dg_dMandel;
       Tensor3333d d2g_dMandel_dMandel;
 
-      std::tie( f,
-                df_dMandel,
-                df_dBetaP,
-                dg_dMandel,
-                d2g_dMandel_dMandel,
-                dLambda ) = yieldFunctionFromStress( mandelStress, betaP );
+      std::tie( f, df_dMandel, df_dBetaP, dg_dMandel, d2g_dMandel_dMandel, h ) = yieldFunctionFromStress( mandelStress,
+                                                                                                          betaP );
 
       df_dFe = einsum< IJ, IJKL >( df_dMandel, dMandel_dFe );
 
@@ -152,15 +148,15 @@ namespace Marmot::Materials {
       const double phiJ2      = 3.0 / B;
       Tensor33d    df_dMandel = phiI1 * Spatial3D::I + phiJ2 * dev;
 
-      const double phiI1I1 = A * A * ( 1.0 / B - A * A * I1 * I1 / ( B * B * B ) ) / ( 2.0 * eta );
-      const double phiJ2J2 = -18.0 * eta / ( B * B * B );
-      const double phiI1J2 = -3.0 * A * A * I1 / ( B * B * B );
-
       // Unused for the non-associative flow rule, but left here for completeness
-      Tensor3333d d2f_dMandel_dMandel = phiI1I1 * Spatial3D::I4 + phiI1J2 * Fastor::outer( Spatial3D::I, dev ) +
+      // const double phiI1I1 = A * A * ( 1.0 / B - A * A * I1 * I1 / ( B * B * B ) ) / ( 2.0 * eta );
+      // const double phiJ2J2 = -18.0 * eta / ( B * B * B );
+      // const double phiI1J2 = -3.0 * A * A * I1 / ( B * B * B );
+
+      /* Tensor3333d d2f_dMandel_dMandel = phiI1I1 * Spatial3D::I4 + phiI1J2 * Fastor::outer( Spatial3D::I, dev ) +
                                         phiI1J2 * Fastor::outer( dev, Spatial3D::I ) +
                                         phiJ2J2 * Fastor::outer( dev, dev ) +
-                                        phiJ2 * ( Spatial3D::ISymm - 1.0 / 3.0 * Spatial3D::I4 );
+                                        phiJ2 * ( Spatial3D::ISymm - 1.0 / 3.0 * Spatial3D::I4 ); */
       double df_dBetaP = -1.0;
 
       const double g = sqrt( std::max( 3 * J2 + thetaPlus * Math::macauly( p ) * Math::macauly( p ) +
@@ -180,17 +176,9 @@ namespace Marmot::Materials {
 
       Tensor3333d d2g_dMandel_dMandel = dQ_dMandel / ( 2.0 * g ) - Fastor::outer( Q, Q ) / ( 4.0 * g * g * g );
 
-      double dLambda;
       double h = sqrt( 2.0 * Fastor::inner( dg_dMandel, dg_dMandel ) / 3.0 );
 
-      if ( f > 0.0 ) {
-        dLambda = eta_VP * std::pow( ( Math::macauly( f ) / betaP ), ( 1.0 / n ) ) / h;
-      }
-      else {
-        dLambda = 0.0;
-      }
-
-      return { f, df_dMandel, df_dBetaP, dg_dMandel, d2g_dMandel_dMandel, dLambda };
+      return { f, df_dMandel, df_dBetaP, dg_dMandel, d2g_dMandel_dMandel, h };
     }
 
     bool isYielding( const Tensor33d& Fe, const double betaP )
@@ -256,9 +244,9 @@ namespace Marmot::Materials {
 
       Tensor33d Fe( X.segment( 0, 9 ).data() );
 
-      double dLambda;
-      // const double dLambda = X( 10 );
-      const double alphaP = X( 9 );
+      double       h;
+      const double dLambda = X( 10 );
+      const double alphaP  = X( 9 );
 
       double betaP, dBetaP_dAlphaP;
       std::tie( betaP, dBetaP_dAlphaP ) = computeBetaP( alphaP );
@@ -270,20 +258,16 @@ namespace Marmot::Materials {
 
       double    f, df_dBetaP;
       Tensor33d df_dMandel, dg_dMandel;
-      std::tie( f,
-                df_dMandel,
-                df_dBetaP,
-                dg_dMandel,
-                d2g_dMandel_dMandel,
-                dLambda ) = yieldFunctionFromStress( mandelStress, betaP );
+      std::tie( f, df_dMandel, df_dBetaP, dg_dMandel, d2g_dMandel_dMandel, h ) = yieldFunctionFromStress( mandelStress,
+                                                                                                          betaP );
 
-      Tensor33d   dGp = dt * dLambda * dg_dMandel;
+      Tensor33d   dGp = dLambda * dg_dMandel;
       Tensor33d   dFp;
       Tensor3333d ddFp_ddGp;
       std::tie( dFp, ddFp_ddGp ) = ContinuumMechanics::FiniteStrain::Plasticity::FlowIntegration::FirstOrderDerived::
         exponentialMap( dGp );
 
-      Tensor3333d ddGp_dFe      = dt * dLambda * einsum< ijmn, mnkL >( d2g_dMandel_dMandel, dMandel_dFe );
+      Tensor3333d ddGp_dFe      = dLambda * einsum< ijmn, mnkL >( d2g_dMandel_dMandel, dMandel_dFe );
       Tensor33d   ddFp_ddLambda = einsum< IJKL, KL >( ddFp_ddGp, dg_dMandel );
 
       Tensor3333d ddFp_dFe = einsum< iImn, mnkL >( ddFp_ddGp, ddGp_dFe );
@@ -298,17 +282,15 @@ namespace Marmot::Materials {
       df_dFe                                       = einsum< IJ, IJKL >( df_dMandel, dMandel_dFe );
 
       R.segment< 9 >( 0 ) += mV9d( Tensor33d( einsum< iJ, JK >( Fe, dFp ) ).data() );
-      R( idxA ) += ( alphaP + dt * dLambda * df_dBetaP );
-      // R( idxF )
-      // R( idxF ) = f;
+      R( idxA ) += ( alphaP - dLambda * h );
+      R( idxF ) = dLambda - dt * eta_VP * std::pow( ( Math::macauly( f ) / betaP ), ( 1.0 / n ) ) / h;
 
-      dR_dX.block< 9, 9 >( 0, 0 ) = mM9d( dFeTrial_dFe.data() ).transpose();
-
-      dR_dX.block< 1, 9 >( idxF, 0 ) = mV9d( df_dFe.data() );
+      dR_dX.block< 9, 9 >( 0, 0 )    = mM9d( dFeTrial_dFe.data() ).transpose();
+      dR_dX.block< 1, 9 >( idxF, 0 ) = mV9d( df_dFe.data() );      // Modify
       dR_dX.block< 9, 1 >( 0, idxF ) = mV9d( dFe_ddLambda.data() );
-      dR_dX( idxF, idxA )            = df_dBetaP * dBetaP_dAlphaP;
-      dR_dX( idxA, idxF )            = df_dBetaP;
-      dR_dX( idxA, idxA )            = 1.0;
+      dR_dX( idxF, idxA )            = df_dBetaP * dBetaP_dAlphaP; // Modify
+      dR_dX( idxA, idxF )            = df_dBetaP;                  // Modify
+      dR_dX( idxA, idxA )            = 1.0;                        // Modify
 
       return { R, dR_dX };
     }
