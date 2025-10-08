@@ -4,7 +4,6 @@
 #include "Marmot/MarmotFastorTensorBasics.h"
 #include "Marmot/MarmotMaterialFiniteStrain.h"
 #include "Marmot/MarmotStressMeasures.h"
-#include <autodiff/forward/dual/dual.hpp>
 
 namespace Marmot::Materials {
 
@@ -71,9 +70,9 @@ namespace Marmot::Materials {
 
       using mV9d = Eigen::Map< Eigen::Matrix< double, 9, 1 > >;
       VectorXd X( 11 );
-      X.segment( 0, 9 ) = mV9d( FeTrial.data() );
-      X( 9 )            = alphaPOld;
-      // X( 10 )            = 0;
+      X.segment( 0, 9 )  = mV9d( FeTrial.data() );
+      X( 9 )             = alphaPOld;
+      X( 10 )            = 0;
       VectorXd        dX = VectorXd::Zero( 11 );
       VectorXd        R  = VectorXd::Zero( 11 );
       Eigen::MatrixXd dR_dX( 11, 11 );
