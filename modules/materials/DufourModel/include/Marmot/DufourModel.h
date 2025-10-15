@@ -285,7 +285,7 @@ namespace Marmot::Materials {
 
       std::tie( f, df_dFe, df_dBetaP, dg_dMandel, dh_dFe ) = yieldFunction( Fe, betaP );
 
-      double    D      = std::pow( ( Math::macauly( f ) / betaP ), ( 1.0 / n ) );
+      double    D      = std::pow( ( Math::macauly( f / betaP ) ), ( 1.0 / n ) );
       Tensor33d dD_dFe = ( 1.0 / n ) * std::pow( ( Math::macauly( f ) / betaP ), ( ( 1.0 - n ) / n ) ) * df_dFe *
                          Math::heavisideExclude0( f ) / betaP;
       double dD_dalphaP = ( 1.0 / n ) * std::pow( ( Math::macauly( f ) / betaP ), ( ( 1.0 - n ) / n ) ) *
