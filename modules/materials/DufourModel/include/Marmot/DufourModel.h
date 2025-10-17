@@ -168,11 +168,11 @@ namespace Marmot::Materials {
       Tensor33d Q = 3.0 * dev +
                     2.0 * ( thetaPlus * Math::macauly( p ) - thetaMinus * Math::macauly( -p ) ) * Spatial3D::I / 3.0;
 
-      Tensor3333d dQ_dMandel = 3.0 * ( Spatial3D::ISymm - Spatial3D::I4 / 3.0 ) +
+      Tensor3333d dQ_dMandel = 3.0 * ( Spatial3D::ISymm - Spatial3D::IHyd / 3.0 ) +
                                2.0 *
                                  ( thetaPlus * Math::heavisideExclude0( p ) +
                                    thetaMinus * Math::heavisideExclude0( -p ) ) *
-                                 Spatial3D::I4 / 9.0;
+                                 Spatial3D::IHyd / 9.0;
 
       Tensor33d   dg_dMandel          = Q / ( 2.0 * g );
       Tensor3333d d2g_dMandel_dMandel = dQ_dMandel / ( 2.0 * g ) - Fastor::outer( Q, Q ) / ( 4.0 * g * g * g );
