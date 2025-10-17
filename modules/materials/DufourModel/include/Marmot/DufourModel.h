@@ -285,11 +285,12 @@ namespace Marmot::Materials {
 
       std::tie( f, df_dFe, df_dBetaP, dg_dMandel, dh_dFe ) = yieldFunction( Fe, betaP );
 
-      double    D      = std::pow( ( Math::macauly( f / betaP ) ), ( 1.0 / n ) );
-      Tensor33d dD_dFe = ( 1.0 / n ) * std::pow( ( Math::macauly( f ) / betaP ), ( ( 1.0 - n ) / n ) ) * df_dFe *
-                         Math::heavisideExclude0( f ) / betaP;
-      double dD_dalphaP = ( 1.0 / n ) * std::pow( ( Math::macauly( f ) / betaP ), ( ( 1.0 - n ) / n ) ) *
-                          ( -dBetaP_dAlphaP ) *
+      double    r      = Math::macauly( f ) / betaP;
+      double    D      = std::pow( Math::macauly( r ), ( 1.0 / n ) );
+      Tensor33d dD_dFe = ( 1.0 / n ) * std::pow( ( Math::macauly( r ) ), ( ( 1.0 - n ) / n ) ) *
+                         Math::heavisideExclude0( r ) * df_dFe * Math::heavisideExclude0( f ) / betaP;
+      double dD_dalphaP = ( 1.0 / n ) * std::pow( ( Math::macauly( r ) ), ( ( 1.0 - n ) / n ) ) *
+                          Math::heavisideExclude0( r ) * ( -dBetaP_dAlphaP ) *
                           ( Math::heavisideExclude0( f ) / betaP + Math::macauly( f ) / ( betaP * betaP ) );
       // Residual
       R.segment< 9 >( 0 ) += mV9d( Tensor33d( einsum< iJ, JK >( Fe, dFp ) ).data() );
