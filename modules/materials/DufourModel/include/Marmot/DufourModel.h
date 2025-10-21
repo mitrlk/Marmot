@@ -298,9 +298,12 @@ namespace Marmot::Materials {
                           Math::heavisideExclude0( r ) * ( -dBetaP_dAlphaP_cap ) *
                           ( Math::heavisideExclude0( f ) / betaP + Math::macauly( f ) / ( betaP_cap * betaP_cap ) );
 
-      const double hmin  = 1e-15;
+      const double hmin  = 1e-8;
       const double hsafe = std::max( h, hmin );
 
+      // std::cout << "D: " << D << std::endl;
+      // std::cout << "f: " << f << std::endl;
+      // std::cout << "betaP: " << betaP << std::endl;
       // Residual
       R.segment< 9 >( 0 ) += mV9d( Tensor33d( einsum< iJ, JK >( Fe, dFp ) ).data() );
       R( idxA ) += ( alphaP - dLambda * h );

@@ -63,7 +63,7 @@ namespace Marmot::Materials {
     Tensor33d dFp;
     dFp.eye();
     Tensor33d Fe = FeTrial;
-    /* std::cout << "FeTrial: " << std::endl << FeTrial << std::endl; */
+
     if ( isYielding( FeTrial, betaP ) ) {
 
       size_t counter = 0;
@@ -89,8 +89,6 @@ namespace Marmot::Materials {
         std::tie( R, dR_dX ) = computeResidualVectorAndTangent( X, FeTrial, alphaPOld, timeIncrement.dT );
         counter += 1;
       }
-      /* std::cout << "inner newton iters: " << counter << std::endl; */
-
       // update plastic deformation increment
       Fe              = X.segment( 0, 9 ).data();
       dFp             = Fastor::inverse( Fe ) % FeTrial;
