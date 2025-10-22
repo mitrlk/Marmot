@@ -298,8 +298,8 @@ namespace Marmot::Materials {
                           Math::heavisideExclude0( r ) * ( -dBetaP_dAlphaP_cap ) *
                           ( Math::heavisideExclude0( f ) / betaP + Math::macauly( f ) / ( betaP_cap * betaP_cap ) );
 
-      const double hmin  = 1e-8;
-      const double hsafe = std::max( h, hmin );
+      // const double hmin  = 1e-8;
+      // const double hsafe = std::max( h, hmin );
 
       // std::cout << "D: " << D << std::endl;
       // std::cout << "f: " << f << std::endl;
@@ -307,7 +307,7 @@ namespace Marmot::Materials {
       // Residual
       R.segment< 9 >( 0 ) += mV9d( Tensor33d( einsum< iJ, JK >( Fe, dFp ) ).data() );
       R( idxA ) += ( alphaP - dLambda * h );
-      R( idxF ) = dLambda - dt * eta_VP * D / hsafe;
+      R( idxF ) = dLambda - dt * eta_VP * D / h;
 
       // Jacobian
       // dR_dFe
@@ -322,9 +322,9 @@ namespace Marmot::Materials {
 
       // dR_dLambda
       Tensor33d dRl_dFe = -eta_VP * dt * ( dD_dFe * h - D * einsum< mn, mnij, to_ij >( dh_dMandel, dMandel_dFe ) ) /
-                          ( hsafe * hsafe );
+                          ( h * h );
       dR_dX.block< 1, 9 >( idxF, 0 ) = mV9d( dRl_dFe.data() ).transpose();
-      dR_dX( idxF, idxA )            = -eta_VP * dt * dD_dalphaP / hsafe;
+      dR_dX( idxF, idxA )            = -eta_VP * dt * dD_dalphaP / h;
       dR_dX( idxF, idxF )            = 1;
 
       return { R, dR_dX };
