@@ -72,7 +72,7 @@ namespace Marmot::Materials {
       VectorXd X( 11 );
       X.segment( 0, 9 )  = mV9d( FeTrial.data() );
       X( 9 )             = alphaPOld;
-      X( 10 )            = 0;
+      X( 10 )            = 0.0;
       VectorXd        dX = VectorXd::Zero( 11 );
       VectorXd        R  = VectorXd::Zero( 11 );
       Eigen::MatrixXd dR_dX( 11, 11 );

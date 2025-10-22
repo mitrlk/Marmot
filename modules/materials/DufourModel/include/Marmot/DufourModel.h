@@ -296,18 +296,21 @@ namespace Marmot::Materials {
                          Math::heavisideExclude0( r ) * df_dFe * Math::heavisideExclude0( f ) / betaP_cap;
       double dD_dalphaP = ( 1.0 / n ) * std::pow( ( Math::macauly( r ) ), ( ( 1.0 - n ) / n ) ) *
                           Math::heavisideExclude0( r ) * ( -dBetaP_dAlphaP_cap ) *
-                          ( Math::heavisideExclude0( f ) / betaP + Math::macauly( f ) / ( betaP_cap * betaP_cap ) );
+                          ( Math::heavisideExclude0( f ) / betaP_cap + Math::macauly( f ) / ( betaP_cap * betaP_cap ) );
 
-      // const double hmin  = 1e-8;
-      // const double hsafe = std::max( h, hmin );
+      const double    hmin  = 1e-8;
+      const double    hsafe = std::max( h, hmin );
+      const Tensor33d hZero( 0.0 );
+      const Tensor33d dh_dMandel_safe = ( h > hmin ) ? dh_dMandel : hZero;
+      // const Tensor33d dh_dFe_safe        = einsum< mn, mnij, to_ij >( dh_dMandel_safe, dMandel_dFe );
 
       // std::cout << "D: " << D << std::endl;
       // std::cout << "f: " << f << std::endl;
       // std::cout << "betaP: " << betaP << std::endl;
       // Residual
       R.segment< 9 >( 0 ) += mV9d( Tensor33d( einsum< iJ, JK >( Fe, dFp ) ).data() );
-      R( idxA ) += ( alphaP - dLambda * h );
-      R( idxF ) = dLambda - dt * eta_VP * D / h;
+      R( idxA ) += ( alphaP - dLambda * hsafe );
+      R( idxF ) = dLambda - dt * eta_VP * D / hsafe;
 
       // Jacobian
       // dR_dFe
@@ -315,16 +318,17 @@ namespace Marmot::Materials {
       dR_dX.block< 9, 1 >( 0, idxF ) = mV9d( dFe_ddLambda.data() );
 
       // dR_dalphaP
-      Tensor33d dRa_dFe              = -dLambda * einsum< mn, mnij, to_ij >( dh_dMandel, dMandel_dFe );
+      Tensor33d dRa_dFe              = -dLambda * einsum< mn, mnij, to_ij >( dh_dMandel_safe, dMandel_dFe );
       dR_dX.block< 1, 9 >( idxA, 0 ) = mV9d( dRa_dFe.data() ).transpose();
       dR_dX( idxA, idxA )            = 1.0;
-      dR_dX( idxA, idxF )            = -h;
+      dR_dX( idxA, idxF )            = -hsafe;
 
       // dR_dLambda
-      Tensor33d dRl_dFe = -eta_VP * dt * ( dD_dFe * h - D * einsum< mn, mnij, to_ij >( dh_dMandel, dMandel_dFe ) ) /
-                          ( h * h );
+      Tensor33d dRl_dFe = -eta_VP * dt *
+                          ( dD_dFe * hsafe - D * einsum< mn, mnij, to_ij >( dh_dMandel_safe, dMandel_dFe ) ) /
+                          ( hsafe * hsafe );
       dR_dX.block< 1, 9 >( idxF, 0 ) = mV9d( dRl_dFe.data() ).transpose();
-      dR_dX( idxF, idxA )            = -eta_VP * dt * dD_dalphaP / h;
+      dR_dX( idxF, idxA )            = -eta_VP * dt * dD_dalphaP / hsafe;
       dR_dX( idxF, idxF )            = 1;
 
       return { R, dR_dX };
