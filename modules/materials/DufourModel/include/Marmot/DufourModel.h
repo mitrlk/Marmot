@@ -59,7 +59,7 @@ namespace Marmot::Materials {
     const double nuP_plus, nuP_minus;
 
     // damage
-    const double kc;
+    const double kc, omegaMax, m;
 
     // mass properties;
     const double density;
@@ -81,15 +81,18 @@ namespace Marmot::Materials {
       inline const static auto layout = makeLayout( {
         { .name = "Fp", .length = 9 },
         { .name = "alphaP", .length = 1 },
-        { .name = "alphaD", .length = 1 },
         { .name = "omega", .length = 1 },
       } );
 
       Fastor::TensorMap< double, 3, 3 > Fp;
       double&                           alphaP;
+      double&                           omega;
 
       DufourModelStateVarManager( double* theStateVarVector )
-        : MarmotStateVarVectorManager( theStateVarVector, layout ), Fp( &find( "Fp" ) ), alphaP( find( "alphaP" ) ){};
+        : MarmotStateVarVectorManager( theStateVarVector, layout ),
+          Fp( &find( "Fp" ) ),
+          alphaP( find( "alphaP" ) ),
+          omega( find( "omega" ) ){};
     };
     std::unique_ptr< DufourModelStateVarManager > stateVars;
 
@@ -98,6 +101,35 @@ namespace Marmot::Materials {
     StateView getStateView( const std::string& result );
 
     void initializeYourself();
+
+    // ------------------------------------------------------------
+    // Damage functions
+    // ------------------------------------------------------------
+
+    std::tuple< double, double, double > computeDamage( const double alphaP_local, const double alphaP_nonlocal )
+    {
+      double alphaP_weighted = alphaP_nonlocal * m + alphaP_local * ( 1 - m );
+
+      double dAlphaP_weighted_dAlphaP_local    = 1 - m;
+      double dAlphaP_weighted_dAlphaP_nonlocal = m;
+
+      if ( alphaP_weighted < 0.0 ) {
+        return { 0.0, 0.0, 0.0 };
+      }
+
+      const double omega = 1.0 - exp( -alphaP_weighted / kc );
+
+      double dOmega_dAlphaP_weigthed = 1.0 / kc * exp( -alphaP_weighted / kc );
+      double dOmega_dAlphaP_local    = dOmega_dAlphaP_weigthed * dAlphaP_weighted_dAlphaP_local;
+      double dOmega_dAlphaP_nonlocal = dOmega_dAlphaP_weigthed * dAlphaP_weighted_dAlphaP_nonlocal;
+
+      if ( omega > omegaMax ) {
+        return { omegaMax, 0.0, 0.0 };
+      }
+      else {
+        return { omega, dOmega_dAlphaP_local, dOmega_dAlphaP_nonlocal };
+      }
+    }
 
     // ------------------------------------------------------------
     // Viscoplasticity functions

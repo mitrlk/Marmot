@@ -44,10 +44,8 @@ namespace Marmot::Materials {
     const Tensor33d FpOld( Fp );
     double&         alphaP    = stateVars->alphaP;
     const double    alphaPOld = alphaP;
-    //  double&         alphaD    = stateVars->alphaD;
-    //  const double    alphaDOld = alphaD;
-    //  double&         omega     = stateVars->omega;
-    //  const double    omegaOld  = omega;
+    double&         omega     = stateVars->omega;
+    const double    omegaOld  = omega;
 
     using namespace Marmot;
     using namespace Fastor;
