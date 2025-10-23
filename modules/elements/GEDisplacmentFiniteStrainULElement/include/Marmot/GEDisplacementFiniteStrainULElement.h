@@ -54,7 +54,7 @@ namespace Marmot::Elements {
    * @tparam nNodes Number of nodes of the element
    */
   template < int nDim, int nNodes >
-  class DisplacementFiniteStrainULElement : public MarmotElement, public MarmotGeometryElement< nDim, nNodes > {
+  class GEDisplacementFiniteStrainULElement : public MarmotElement, public MarmotGeometryElement< nDim, nNodes > {
 
   public:
     /**
@@ -68,11 +68,13 @@ namespace Marmot::Elements {
 
     /// @brief Displacement degrees of freedom per node
     static constexpr int nDofPerNodeU = nDim; // Displacement   field U
+    static constexpr int nDofPerNodeK = 1;
+    static constexpr int nDofPerNode  = nDofPerNodeU + nDofPerNodeK;
 
     /// @brief Total number of coordinates of the element
     static constexpr int nCoordinates = nNodes * nDim;
 
-    /// @brief Block size of element stiffness matrix and load vector for displacement field U
+    /// @brief Block size of element stiffnessffness matrix and load vector for displacement field U
     static constexpr int bsU = nNodes * nDofPerNodeU;
 
     /// @brief Size of element stiffness matrix and load vector
@@ -213,9 +215,9 @@ namespace Marmot::Elements {
      * @param integrationType[in] Integration type of the element
      * @param sectionType[in] Section type of the element
      */
-    DisplacementFiniteStrainULElement( int                                                 elementID,
-                                       Marmot::FiniteElement::Quadrature::IntegrationTypes integrationType,
-                                       SectionType                                         sectionType );
+    GEDisplacementFiniteStrainULElement( int                                                 elementID,
+                                         Marmot::FiniteElement::Quadrature::IntegrationTypes integrationType,
+                                         SectionType                                         sectionType );
 
     /// @brief Get the total number of required state variables of the element
     int getNumberOfRequiredStateVars();
@@ -371,8 +373,8 @@ namespace Marmot::Elements {
   };
 
   template < int nDim, int nNodes >
-  StateView DisplacementFiniteStrainULElement< nDim, nNodes >::getStateView( const std::string& stateName,
-                                                                             int                qpNumber )
+  StateView GEDisplacementFiniteStrainULElement< nDim, nNodes >::getStateView( const std::string& stateName,
+                                                                               int                qpNumber )
   {
     const auto& qp = qps[qpNumber];
     if ( qp.managedStateVars->contains( stateName ) ) {
@@ -384,7 +386,7 @@ namespace Marmot::Elements {
   }
 
   template < int nDim, int nNodes >
-  DisplacementFiniteStrainULElement< nDim, nNodes >::DisplacementFiniteStrainULElement(
+  GEDisplacementFiniteStrainULElement< nDim, nNodes >::GEDisplacementFiniteStrainULElement(
     int                                                 elementID,
     Marmot::FiniteElement::Quadrature::IntegrationTypes integrationType,
     SectionType                                         sectionType )
@@ -401,13 +403,13 @@ namespace Marmot::Elements {
   }
 
   template < int nDim, int nNodes >
-  int DisplacementFiniteStrainULElement< nDim, nNodes >::getNumberOfRequiredStateVars()
+  int GEDisplacementFiniteStrainULElement< nDim, nNodes >::getNumberOfRequiredStateVars()
   {
     return qps[0].getNumberOfRequiredStateVars() * qps.size();
   }
 
   template < int nDim, int nNodes >
-  std::vector< std::vector< std::string > > DisplacementFiniteStrainULElement< nDim, nNodes >::getNodeFields()
+  std::vector< std::vector< std::string > > GEDisplacementFiniteStrainULElement< nDim, nNodes >::getNodeFields()
   {
     using namespace std;
 
@@ -422,7 +424,7 @@ namespace Marmot::Elements {
   }
 
   template < int nDim, int nNodes >
-  std::vector< int > DisplacementFiniteStrainULElement< nDim, nNodes >::getDofIndicesPermutationPattern()
+  std::vector< int > GEDisplacementFiniteStrainULElement< nDim, nNodes >::getDofIndicesPermutationPattern()
   {
     static std::vector< int > permutationPattern;
     if ( permutationPattern.empty() ) {
@@ -435,7 +437,7 @@ namespace Marmot::Elements {
   }
 
   template < int nDim, int nNodes >
-  void DisplacementFiniteStrainULElement< nDim, nNodes >::assignStateVars( double* managedStateVars, int nStateVars )
+  void GEDisplacementFiniteStrainULElement< nDim, nNodes >::assignStateVars( double* managedStateVars, int nStateVars )
   {
     const int nQpStateVars = nStateVars / qps.size();
 
@@ -447,7 +449,7 @@ namespace Marmot::Elements {
   }
 
   template < int nDim, int nNodes >
-  void DisplacementFiniteStrainULElement< nDim, nNodes >::assignProperty(
+  void GEDisplacementFiniteStrainULElement< nDim, nNodes >::assignProperty(
     const ElementProperties& elementPropertiesInfo )
   {
     new ( &elementProperties ) Eigen::Map< const Eigen::VectorXd >( elementPropertiesInfo.elementProperties,
@@ -455,7 +457,7 @@ namespace Marmot::Elements {
   }
 
   template < int nDim, int nNodes >
-  void DisplacementFiniteStrainULElement< nDim, nNodes >::assignProperty( const MarmotMaterialSection& section )
+  void GEDisplacementFiniteStrainULElement< nDim, nNodes >::assignProperty( const MarmotMaterialSection& section )
   {
 
     for ( auto& qp : qps ) {
@@ -468,13 +470,13 @@ namespace Marmot::Elements {
   }
 
   template < int nDim, int nNodes >
-  void DisplacementFiniteStrainULElement< nDim, nNodes >::assignNodeCoordinates( const double* coordinates )
+  void GEDisplacementFiniteStrainULElement< nDim, nNodes >::assignNodeCoordinates( const double* coordinates )
   {
     ParentGeometryElement::assignNodeCoordinates( coordinates );
   }
 
   template < int nDim, int nNodes >
-  void DisplacementFiniteStrainULElement< nDim, nNodes >::initializeYourself()
+  void GEDisplacementFiniteStrainULElement< nDim, nNodes >::initializeYourself()
   {
     for ( QuadraturePoint& qp : qps ) {
 
@@ -501,13 +503,13 @@ namespace Marmot::Elements {
   }
 
   template < int nDim, int nNodes >
-  void DisplacementFiniteStrainULElement< nDim, nNodes >::computeYourself( const double* qTotal,
-                                                                           const double* dQ,
-                                                                           double*       rightHandSide,
-                                                                           double*       stiffnessMatrix,
-                                                                           const double* time,
-                                                                           double        dT,
-                                                                           double&       pNewDT )
+  void GEDisplacementFiniteStrainULElement< nDim, nNodes >::computeYourself( const double* qTotal,
+                                                                             const double* dQ,
+                                                                             double*       rightHandSide,
+                                                                             double*       stiffnessMatrix,
+                                                                             const double* time,
+                                                                             double        dT,
+                                                                             double&       pNewDT )
   {
     using namespace Fastor;
 
@@ -629,7 +631,7 @@ namespace Marmot::Elements {
   }
 
   template < int nDim, int nNodes >
-  void DisplacementFiniteStrainULElement< nDim, nNodes >::computeDistributedLoad(
+  void GEDisplacementFiniteStrainULElement< nDim, nNodes >::computeDistributedLoad(
     MarmotElement::DistributedLoadTypes loadType,
     double*                             rightHandSide,
     double*                             stiffnessMatrix,
@@ -687,7 +689,7 @@ namespace Marmot::Elements {
   }
 
   template < int nDim, int nNodes >
-  void DisplacementFiniteStrainULElement< nDim, nNodes >::setInitialConditions(
+  void GEDisplacementFiniteStrainULElement< nDim, nNodes >::setInitialConditions(
     StateTypes    state,
     const double* initialConditionDefinition )
   {
@@ -736,13 +738,13 @@ namespace Marmot::Elements {
   }
 
   template < int nDim, int nNodes >
-  void DisplacementFiniteStrainULElement< nDim, nNodes >::computeBodyForce( double*       rightHandSide,
-                                                                            double*       stiffnessMatrix,
-                                                                            const double* load,
+  void GEDisplacementFiniteStrainULElement< nDim, nNodes >::computeBodyForce( double*       rightHandSide,
+                                                                              double*       stiffnessMatrix,
+                                                                              const double* load,
 
-                                                                            const double* qTotal,
-                                                                            const double* time,
-                                                                            double        dT )
+                                                                              const double* qTotal,
+                                                                              const double* time,
+                                                                              double        dT )
   {
     Eigen::Map< RhsSized >                                     r( rightHandSide );
     Eigen::Ref< USizedVector >                                 r_U( r.head( bsU ) );
@@ -753,7 +755,7 @@ namespace Marmot::Elements {
   }
 
   template < int nDim, int nNodes >
-  std::vector< double > DisplacementFiniteStrainULElement< nDim, nNodes >::getCoordinatesAtCenter()
+  std::vector< double > GEDisplacementFiniteStrainULElement< nDim, nNodes >::getCoordinatesAtCenter()
   {
     std::vector< double > coords( nDim );
 
@@ -764,8 +766,8 @@ namespace Marmot::Elements {
   }
 
   template < int nDim, int nNodes >
-  std::vector< std::vector< double > > DisplacementFiniteStrainULElement< nDim,
-                                                                          nNodes >::getCoordinatesAtQuadraturePoints()
+  std::vector< std::vector< double > > GEDisplacementFiniteStrainULElement< nDim,
+                                                                            nNodes >::getCoordinatesAtQuadraturePoints()
   {
     std::vector< std::vector< double > > listedCoords;
 
@@ -781,15 +783,15 @@ namespace Marmot::Elements {
   }
 
   template < int nDim, int nNodes >
-  int DisplacementFiniteStrainULElement< nDim, nNodes >::getNumberOfQuadraturePoints()
+  int GEDisplacementFiniteStrainULElement< nDim, nNodes >::getNumberOfQuadraturePoints()
   {
     return qps.size();
   }
 
   template < int nNodes >
-  class AxiSymmetricDisplacementFiniteStrainULElement : public DisplacementFiniteStrainULElement< 2, nNodes > {
+  class AxiSymmetricGEDisplacementFiniteStrainULElement : public GEDisplacementFiniteStrainULElement< 2, nNodes > {
 
-    using DisplacementFiniteStrainULElement< 2, nNodes >::DisplacementFiniteStrainULElement;
+    using GEDisplacementFiniteStrainULElement< 2, nNodes >::GEDisplacementFiniteStrainULElement;
 
     void computeYourself( const double* QTotal,
                           const double* dQ,
@@ -801,19 +803,19 @@ namespace Marmot::Elements {
   };
 
   template < int nNodes >
-  void AxiSymmetricDisplacementFiniteStrainULElement< nNodes >::computeYourself( const double* qTotal,
-                                                                                 const double* dQ,
-                                                                                 double*       rightHandSide,
-                                                                                 double*       stiffnessMatrix,
-                                                                                 const double* time,
-                                                                                 double        dT,
-                                                                                 double&       pNewDT )
+  void AxiSymmetricGEDisplacementFiniteStrainULElement< nNodes >::computeYourself( const double* qTotal,
+                                                                                   const double* dQ,
+                                                                                   double*       rightHandSide,
+                                                                                   double*       stiffnessMatrix,
+                                                                                   const double* time,
+                                                                                   double        dT,
+                                                                                   double&       pNewDT )
   {
     constexpr int nDim = 2;
 
-    using Parent              = DisplacementFiniteStrainULElement< 2, nNodes >;
+    using Parent              = GEDisplacementFiniteStrainULElement< 2, nNodes >;
     const auto idxU           = Parent::idxU;
-    const auto sizeLoadVector = DisplacementFiniteStrainULElement< 2, nNodes >::sizeLoadVector;
+    const auto sizeLoadVector = GEDisplacementFiniteStrainULElement< 2, nNodes >::sizeLoadVector;
     using Material            = MarmotMaterialFiniteStrain;
 
     using namespace Fastor;
