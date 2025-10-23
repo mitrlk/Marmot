@@ -59,7 +59,7 @@ namespace Marmot::Materials {
     const double nuP_plus, nuP_minus;
 
     // damage
-    const double kc, omegaMax, m;
+    const double kc, omegaMax, ld, m;
 
     // mass properties;
     const double density;
@@ -106,7 +106,7 @@ namespace Marmot::Materials {
     // Damage functions
     // ------------------------------------------------------------
 
-    std::tuple< double, double, double > computeDamage( const double alphaP_local, const double alphaP_nonlocal )
+    std::tuple< double, double, double > computeOmega( const double alphaP_local, const double alphaP_nonlocal )
     {
       double alphaP_weighted = alphaP_nonlocal * m + alphaP_local * ( 1 - m );
 

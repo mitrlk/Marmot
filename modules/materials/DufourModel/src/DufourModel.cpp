@@ -30,7 +30,10 @@ namespace Marmot::Materials {
       nuP_plus( materialProperties[13] ),
       nuP_minus( materialProperties[14] ),
       kc( materialProperties[15] ),
-      density( nMaterialProperties > 16 ? materialProperties[16] : 0.0 ) // TODO: make mandatory material parameter
+      omegaMax( materialProperties[16] ),
+      ld( materialProperties[17] ),
+      m( materialProperties[18] ),
+      density( nMaterialProperties > 19 ? materialProperties[19] : 0.0 )
   {
   }
 
