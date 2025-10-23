@@ -29,7 +29,7 @@ namespace Marmot::Materials {
       n( materialProperties[12] ),
       nuP_plus( materialProperties[13] ),
       nuP_minus( materialProperties[14] ),
-      kc( materialProperties[15] ),
+      epsF( materialProperties[15] ),
       omegaMax( materialProperties[16] ),
       ld( materialProperties[17] ),
       m( materialProperties[18] ),
@@ -50,6 +50,9 @@ namespace Marmot::Materials {
     double&         omega     = stateVars->omega;
     const double    omegaOld  = omega;
 
+    nonLocalRadius         = ld;
+    double alphaP_nonlocal = KOld + dK;
+
     using namespace Marmot;
     using namespace Fastor;
     using namespace Eigen;
@@ -65,7 +68,7 @@ namespace Marmot::Materials {
     dFp.eye();
     Tensor33d Fe = FeTrial;
 
-    if ( isYielding( FeTrial, betaP ) ) {
+    if ( isYielding( FeTrial, betaP, omegaOld ) ) {
 
       size_t counter = 0;
 
@@ -105,7 +108,7 @@ namespace Marmot::Materials {
       memcpy( Fp.data(), FpNew.data(), 9 * sizeof( double ) );
 
       using namespace ContinuumMechanics;
-      double      psi_;
+      double      psi_, dOmega_dAlphaP_local, dOmega_dAlphaP_nonlocal;
       Tensor33d   Ce, dPsi_dCe;
       Tensor3333d dCe_dFe, d2Psi_dCedCe;
       std::tie( Ce, dCe_dFe ) = DeformationMeasures::FirstOrderDerived::rightCauchyGreen( Fe );
@@ -115,14 +118,18 @@ namespace Marmot::Materials {
       std::tie( psi_, dPsi_dCe, d2Psi_dCedCe ) = EnergyDensityFunctions::SecondOrderDerived::PenceGouPotentialB( Ce,
                                                                                                                  K,
                                                                                                                  G );
+      // compute damage variable
+      std::tie( omega, dOmega_dAlphaP_local, dOmega_dAlphaP_nonlocal ) = computeOmega( alphaP, alphaP_nonlocal );
+
       // compute Kirchhoff stress
-      Tensor33d   PK2 = 2. * dPsi_dCe;
-      Tensor3333d dTau_dPK2, dTau_dFe_partial;
+      Tensor33d   PK2 = 2. * dPsi_dCe * ( 1.0 - omega );
+      Tensor3333d dTau_dPK2eff, dTau_dPK2, dTau_dFe_partial;
       std::tie( response.tau,
-                dTau_dPK2,
+                dTau_dPK2eff,
                 dTau_dFe_partial )  = StressMeasures::FirstOrderDerived::KirchhoffStressFromPK2( PK2, Fe );
       response.rho                  = 1.0;
       response.elasticEnergyDensity = psi_;
+      dTau_dPK2                     = dTau_dPK2eff * ( 1.0 - omega );
 
       // compute tangent operator
       using mM9d = Eigen::Map< Eigen::Matrix< double, 9, 9 > >;
@@ -137,7 +144,7 @@ namespace Marmot::Materials {
 
       Tensor3333d dFe_dF = Tensor3333d( Matrix9d( dXdDeformation.block< 9, 9 >( 0, 0 ).transpose() ).data() );
 
-      Tensor3333d dPK2_dFe = einsum< ijKL, KLMN >( 2. * d2Psi_dCedCe, dCe_dFe );
+      Tensor3333d dPK2_dFe = einsum< ijKL, KLMN >( 2. * d2Psi_dCedCe, dCe_dFe ) * ( 1.0 - omega );
       Tensor3333d dPK2_dF  = einsum< ijKL, KLMN >( dPK2_dFe, dFe_dF );
 
       /* tangents.dTau_dF = einsum< IJKL, KLMN >( dTau_dPK2, dPK2_dF ) +
@@ -146,7 +153,7 @@ namespace Marmot::Materials {
     }
     else {
       using namespace Marmot::ContinuumMechanics;
-      double      psi_;
+      double      psi_, dAlphaP_weighted_dAlphaP_local, dAlphaP_weighted_dAlphaP_nonlocal;
       Tensor33d   Ce, dPsi_dCe;
       Tensor3333d dCe_dFe, d2Psi_dCedCe;
       std::tie( Ce, dCe_dFe ) = DeformationMeasures::FirstOrderDerived::rightCauchyGreen( Fe );
@@ -156,17 +163,22 @@ namespace Marmot::Materials {
       std::tie( psi_, dPsi_dCe, d2Psi_dCedCe ) = EnergyDensityFunctions::SecondOrderDerived::PenceGouPotentialB( Ce,
                                                                                                                  K,
                                                                                                                  G );
+      std::tie( omega,
+                dAlphaP_weighted_dAlphaP_local,
+                dAlphaP_weighted_dAlphaP_nonlocal ) = computeOmega( alphaPOld, alphaP_nonlocal );
+
       // compute Kirchhoff stress
-      Tensor33d   PK2 = 2. * dPsi_dCe;
-      Tensor3333d dTau_dPK2, dTau_dFe_partial;
+      Tensor33d   PK2 = 2. * dPsi_dCe * ( 1.0 - omega );
+      Tensor3333d dTau_dPK2eff, dTau_dPK2, dTau_dFe_partial;
       std::tie( response.tau,
-                dTau_dPK2,
+                dTau_dPK2eff,
                 dTau_dFe_partial )  = StressMeasures::FirstOrderDerived::KirchhoffStressFromPK2( PK2, Fe );
       response.rho                  = 1.0;
       response.elasticEnergyDensity = psi_;
+      dTau_dPK2                     = dTau_dPK2eff * ( 1.0 - omega );
 
       // compute tangent operator
-      Tensor3333d dPK2_dFe = einsum< ijKL, KLMN >( 2. * d2Psi_dCedCe, dCe_dFe );
+      Tensor3333d dPK2_dFe = einsum< ijKL, KLMN >( 2. * d2Psi_dCedCe, dCe_dFe ) * ( 1.0 - omega );
       Tensor3333d dFe_dF   = einsum< IK, JL, to_IJKL >( Spatial3D::I, transpose( Fastor::inverse( FpOld ) ) );
       Tensor3333d dPK2_dF  = einsum< ijKL, KLMN >( dPK2_dFe, dFe_dF );
 

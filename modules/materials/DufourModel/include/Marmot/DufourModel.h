@@ -59,7 +59,7 @@ namespace Marmot::Materials {
     const double nuP_plus, nuP_minus;
 
     // damage
-    const double kc, omegaMax, ld, m;
+    const double epsF, omegaMax, ld, m;
 
     // mass properties;
     const double density;
@@ -117,9 +117,9 @@ namespace Marmot::Materials {
         return { 0.0, 0.0, 0.0 };
       }
 
-      const double omega = 1.0 - exp( -alphaP_weighted / kc );
+      const double omega = 1.0 - exp( -alphaP_weighted / epsF );
 
-      double dOmega_dAlphaP_weigthed = 1.0 / kc * exp( -alphaP_weighted / kc );
+      double dOmega_dAlphaP_weigthed = 1.0 / epsF * exp( -alphaP_weighted / epsF );
       double dOmega_dAlphaP_local    = dOmega_dAlphaP_weigthed * dAlphaP_weighted_dAlphaP_local;
       double dOmega_dAlphaP_nonlocal = dOmega_dAlphaP_weigthed * dAlphaP_weighted_dAlphaP_nonlocal;
 
@@ -158,6 +158,26 @@ namespace Marmot::Materials {
       df_dFe                 = einsum< mn, mnij, to_ij >( df_dMandel, dMandel_dFe );
 
       return { f, df_dFe, df_dBetaP, dg_dMandel, dh_dFe };
+    }
+
+    std::tuple< double > yieldFunctionNominal( const Tensor33d& Fe, const double betaP, const double omega )
+    {
+
+      Tensor33d   mandelStressN;
+      Tensor3333d dMandel_dFe;
+      std::tie( mandelStressN, dMandel_dFe ) = computeNominalMandelStress( Fe, omega );
+
+      const double eta = fc / ft;
+      Tensor33d    dev = deviatoric( mandelStressN );
+      const double J2  = 0.5 * Fastor::inner( dev, dev );
+      const double I1  = trace( mandelStressN );
+
+      const double A = eta - 1.0;
+      const double B = sqrt( std::max( A * A * I1 * I1 + 12.0 * eta * J2, 1e-15 ) );
+
+      const double f = ( A * I1 + B ) / ( 2.0 * eta ) - betaP;
+
+      return { f };
     }
 
     std::tuple< double, Tensor33d, double, Tensor33d, Tensor3333d, double, Tensor33d > yieldFunctionFromStress(
@@ -215,11 +235,10 @@ namespace Marmot::Materials {
       return { f, df_dMandel, df_dBetaP, dg_dMandel, d2g_dMandel_dMandel, h, dh_dMandel };
     }
 
-    bool isYielding( const Tensor33d& Fe, const double betaP )
+    bool isYielding( const Tensor33d& Fe, const double betaP, const double omega )
     {
-      double    f, df_dBetaP;
-      Tensor33d df_dFe, dg_dMandel, dh_dFe;
-      std::tie( f, df_dFe, df_dBetaP, dg_dMandel, dh_dFe ) = yieldFunction( Fe, betaP );
+      double f;
+      std::tie( f ) = yieldFunctionNominal( Fe, betaP, omega );
       if ( f > 0.0 )
         return true;
       else
@@ -246,6 +265,33 @@ namespace Marmot::Materials {
                     einsum< IK, iL, iJ, to_IJKL >( Spatial3D::I, Spatial3D::I, PK2 );
       Tensor3333d dMandel_dFe = einsum< IJKL, KLMN >( dMandel_dCe, dCe_dFe );
       return { mandel, dMandel_dFe };
+    }
+
+    std::tuple< Tensor33d, Tensor3333d > computeNominalMandelStress( const Tensor33d& Fe, const double& omega )
+    {
+      using namespace Marmot::ContinuumMechanics;
+      Tensor33d   Ce;
+      Tensor3333d dCe_dFe;
+      std::tie( Ce, dCe_dFe ) = DeformationMeasures::FirstOrderDerived::rightCauchyGreen( Fe );
+
+      double      psi_;
+      Tensor33d   dPsi_dCe;
+      Tensor3333d d2Psi_dCedCe, dMandelN_dCe;
+
+      std::tie( psi_, dPsi_dCe, d2Psi_dCedCe ) = EnergyDensityFunctions::SecondOrderDerived::PenceGouPotentialB( Ce,
+                                                                                                                 K,
+                                                                                                                 G );
+
+      Tensor33d       PK2     = 2.0 * dPsi_dCe;
+      const Tensor33d mandelN = ( Ce % PK2 ) * ( 1.0 - omega );
+
+      dMandelN_dCe = ( einsum< Ii, iJKL, to_IJKL >( Ce, 2. * d2Psi_dCedCe ) +
+                       einsum< IK, iL, iJ, to_IJKL >( Spatial3D::I, Spatial3D::I, PK2 ) ) *
+                     ( 1.0 - omega );
+
+      Tensor3333d dMandelN_dFe = einsum< IJKL, KLMN >( dMandelN_dCe, dCe_dFe );
+
+      return { mandelN, dMandelN_dFe };
     }
 
     std::tuple< double, double > computeBetaP( const double alphaP )
