@@ -18,7 +18,7 @@ namespace Marmot::Elements::Registration {
      *
      * formulation:     01 Update Lagrangian
      *
-     * active fields:   1: displacement
+     * active fields:   2: displacement + nonlocal damage
      *
      *
      * type of element: 2: 2D full integration, plane stress
@@ -31,12 +31,12 @@ namespace Marmot::Elements::Registration {
      *                  1: 2D full integration, axisymmetric
      * */
 
-    CPE8RUL  = CONCAT( 1193, 83801 ),
-    C3D8UL   = CONCAT( 1193, 83301 ),
-    C3D20UL  = CONCAT( 1193, 203301 ),
-    C3D20RUL = CONCAT( 1193, 203601 ),
-    CX8RUL   = CONCAT( 1193, 83901 ),
-    CX8UL    = CONCAT( 1193, 83101 ),
+    CPE8RUL  = CONCAT( 1193, 82801 ),
+    C3D8UL   = CONCAT( 1193, 82301 ),
+    C3D20UL  = CONCAT( 1193, 202301 ),
+    C3D20RUL = CONCAT( 1193, 202601 ),
+    CX8RUL   = CONCAT( 1193, 82901 ),
+    CX8UL    = CONCAT( 1193, 82101 ),
 
   };
 #undef CONCAT

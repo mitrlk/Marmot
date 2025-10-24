@@ -68,20 +68,22 @@ namespace Marmot::Elements {
 
     /// @brief Displacement degrees of freedom per node
     static constexpr int nDofPerNodeU = nDim; // Displacement   field U
-    static constexpr int nDofPerNodeK = 1;
-    static constexpr int nDofPerNode  = nDofPerNodeU + nDofPerNodeK;
+    static constexpr int nDofPerNodeA = 1;
+    static constexpr int nDofPerNode  = nDofPerNodeU + nDofPerNodeA;
 
     /// @brief Total number of coordinates of the element
     static constexpr int nCoordinates = nNodes * nDim;
 
     /// @brief Block size of element stiffnessffness matrix and load vector for displacement field U
     static constexpr int bsU = nNodes * nDofPerNodeU;
+    static constexpr int bsA = nNodes * nDofPerNodeA;
 
     /// @brief Size of element stiffness matrix and load vector
-    static constexpr int sizeLoadVector = bsU;
+    static constexpr int sizeLoadVector = nNodes * nDofPerNode;
 
     /// @brief Starting index of displacement field U in element stiffness matrix and load vector
     static constexpr int idxU = 0;
+    static constexpr int idxA = bsU;
 
     /// @brief Parent element class for geometry related operations as, e.g., shape functions
     using ParentGeometryElement = MarmotGeometryElement< nDim, nNodes >;
@@ -102,6 +104,7 @@ namespace Marmot::Elements {
     using KSizedMatrix = Eigen::Matrix< double, sizeLoadVector, sizeLoadVector >;
     /// @brief Sized vector type used for the element displacement vector
     using USizedVector = Eigen::Matrix< double, bsU, 1 >;
+    using ASizedVector = Eigen::Matrix< double, bsA, 1 >;
     /// @brief Sized vector type used for force vectors
     using ForceSized = Eigen::Matrix< double, nDim, 1 >;
 
@@ -418,6 +421,7 @@ namespace Marmot::Elements {
       for ( int i = 0; i < nNodes; i++ ) {
         nodeFields.push_back( vector< string >() );
         nodeFields[i].push_back( "displacement" );
+        nodeFields[i].push_back( "nonlocal damage" );
       }
 
     return nodeFields;
@@ -430,7 +434,9 @@ namespace Marmot::Elements {
     if ( permutationPattern.empty() ) {
       for ( int i = 0; i < nNodes; i++ )
         for ( int j = 0; j < nDim; j++ )
-          permutationPattern.push_back( i * nDim + j );
+          permutationPattern.push_back( i * ( nDim + 1 ) + j );
+      for ( int i = 0; i < nNodes; i++ )
+        permutationPattern.push_back( i * ( nDim + 1 ) + nDim );
     }
 
     return permutationPattern;
