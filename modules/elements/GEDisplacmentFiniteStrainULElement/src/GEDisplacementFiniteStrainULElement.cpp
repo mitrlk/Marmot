@@ -31,12 +31,12 @@ namespace Marmot::Elements::Registration {
      *                  1: 2D full integration, axisymmetric
      * */
 
-    CPE8RUL  = CONCAT( 1193, 82801 ),
-    C3D8UL   = CONCAT( 1193, 82301 ),
-    C3D20UL  = CONCAT( 1193, 202301 ),
-    C3D20RUL = CONCAT( 1193, 202601 ),
-    CX8RUL   = CONCAT( 1193, 82901 ),
-    CX8UL    = CONCAT( 1193, 82101 ),
+    GCPE8RUL  = CONCAT( 1193, 82801 ),
+    GC3D8UL   = CONCAT( 1193, 82301 ),
+    GC3D20UL  = CONCAT( 1193, 202301 ),
+    GC3D20RUL = CONCAT( 1193, 202601 ),
+    GCX8RUL   = CONCAT( 1193, 82901 ),
+    GCX8UL    = CONCAT( 1193, 82101 ),
 
   };
 #undef CONCAT
@@ -52,39 +52,41 @@ namespace Marmot::Elements::Registration {
   using namespace MarmotLibrary;
   using namespace Marmot::FiniteElement::Quadrature;
 
-  const static bool CX8RUL_isRegistered = MarmotElementFactory::
-    registerElement( "CX8RUL",
-                     GEDisplacementFiniteStrainULElementCode::CX8RUL,
+  const static bool GCX8RUL_isRegistered = MarmotElementFactory::
+    registerElement( "GCX8RUL",
+                     GEDisplacementFiniteStrainULElementCode::GCX8RUL,
                      makeFactoryFunction< AxiSymmetricGEDisplacementFiniteStrainULElement< 8 >,
                                           ReducedIntegration,
                                           AxiSymmetricGEDisplacementFiniteStrainULElement< 8 >::PlaneStrain >() );
 
-  const static bool CX8UL_isRegistered = MarmotElementFactory::
-    registerElement( "CX8UL",
-                     GEDisplacementFiniteStrainULElementCode::CX8UL,
+  const static bool GCX8UL_isRegistered = MarmotElementFactory::
+    registerElement( "GCX8UL",
+                     GEDisplacementFiniteStrainULElementCode::GCX8UL,
                      makeFactoryFunction< AxiSymmetricGEDisplacementFiniteStrainULElement< 8 >,
                                           FullIntegration,
                                           AxiSymmetricGEDisplacementFiniteStrainULElement< 8 >::PlaneStrain >() );
 
-  const static bool CPE8RGradientEnhancedMicropolar_isRegistered = MarmotElementFactory::
-    registerElement( "CPE8RUL",
-                     GEDisplacementFiniteStrainULElementCode::CPE8RUL,
+  const static bool GCPE8RGradientEnhancedMicropolar_isRegistered = MarmotElementFactory::
+    registerElement( "GCPE8RUL",
+                     GEDisplacementFiniteStrainULElementCode::GCPE8RUL,
                      makeFactoryFunction< GEDisplacementFiniteStrainULElement< 2, 8 >,
                                           ReducedIntegration,
                                           GEDisplacementFiniteStrainULElement< 2, 8 >::PlaneStrain >() );
 
-  const static bool C3D8UL_isRegistered = MarmotLibrary::MarmotElementFactory::
-    registerElement( "C3D8UL", GEDisplacementFiniteStrainULElementCode::C3D8UL, []( int elementID ) -> MarmotElement* {
-      return new GEDisplacementFiniteStrainULElement<
-        3,
-        8 >( elementID,
-             Marmot::FiniteElement::Quadrature::IntegrationTypes::FullIntegration,
-             GEDisplacementFiniteStrainULElement< 3, 8 >::SectionType::Solid );
-    } );
+  const static bool GC3D8UL_isRegistered = MarmotLibrary::MarmotElementFactory::
+    registerElement( "GC3D8UL",
+                     GEDisplacementFiniteStrainULElementCode::GC3D8UL,
+                     []( int elementID ) -> MarmotElement* {
+                       return new GEDisplacementFiniteStrainULElement<
+                         3,
+                         8 >( elementID,
+                              Marmot::FiniteElement::Quadrature::IntegrationTypes::FullIntegration,
+                              GEDisplacementFiniteStrainULElement< 3, 8 >::SectionType::Solid );
+                     } );
 
-  const static bool C3D20RUL_isRegistered = MarmotLibrary::MarmotElementFactory::
-    registerElement( "C3D20RUL",
-                     GEDisplacementFiniteStrainULElementCode::C3D20RUL,
+  const static bool GC3D20RUL_isRegistered = MarmotLibrary::MarmotElementFactory::
+    registerElement( "GC3D20RUL",
+                     GEDisplacementFiniteStrainULElementCode::GC3D20RUL,
                      []( int elementID ) -> MarmotElement* {
                        return new GEDisplacementFiniteStrainULElement<
                          3,
@@ -93,9 +95,9 @@ namespace Marmot::Elements::Registration {
                                GEDisplacementFiniteStrainULElement< 3, 20 >::SectionType::Solid );
                      } );
 
-  const static bool C3D20UL_isRegistered = MarmotLibrary::MarmotElementFactory::
-    registerElement( "C3D20UL",
-                     GEDisplacementFiniteStrainULElementCode::C3D20UL,
+  const static bool GC3D20UL_isRegistered = MarmotLibrary::MarmotElementFactory::
+    registerElement( "GC3D20UL",
+                     GEDisplacementFiniteStrainULElementCode::GC3D20UL,
                      []( int elementID ) -> MarmotElement* {
                        return new GEDisplacementFiniteStrainULElement<
                          3,
