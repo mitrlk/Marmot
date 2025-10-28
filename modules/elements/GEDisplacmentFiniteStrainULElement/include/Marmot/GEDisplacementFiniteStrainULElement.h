@@ -67,8 +67,8 @@ namespace Marmot::Elements {
     };
 
     /// @brief Displacement degrees of freedom per node
-    static constexpr int nDofPerNodeU = nDim; // Displacement   field U
-    static constexpr int nDofPerNodeA = 1;
+    static constexpr int nDofPerNodeU = nDim; // Displacement field U
+    static constexpr int nDofPerNodeA = 1;    // Nonlocal field A
     static constexpr int nDofPerNode  = nDofPerNodeU + nDofPerNodeA;
 
     /// @brief Total number of coordinates of the element
@@ -83,7 +83,7 @@ namespace Marmot::Elements {
 
     /// @brief Starting index of displacement field U in element stiffness matrix and load vector
     static constexpr int idxU = 0;
-    static constexpr int idxA = bsU;
+    static constexpr int idxA = idxU + bsU;
 
     /// @brief Parent element class for geometry related operations as, e.g., shape functions
     using ParentGeometryElement = MarmotGeometryElement< nDim, nNodes >;
@@ -524,12 +524,21 @@ namespace Marmot::Elements {
 
     // in  ...
     const auto qU_np = TensorMap< const double, nNodes, nDim >( qTotal );
+    const auto qA_np = TensorMap< const double, nNodes, 1 >( qTotal + idxA );
+
+    const auto dQU = TensorMap< const double, nNodes, nDim >( dQ );
+
+    const auto qU_n = evaluate( qU_np - dQU );
 
     // ... and out: residuals and stiffness
     TensorMap< double, nNodes, nDim > r_U( rightHandSide );
+    TensorMap< double, nNodes, 1 >    r_A( rightHandSide + idxA );
 
     // temporary stiffness matrices, which are assembled into the large one at the end of the method
     Tensor< double, nDim, nNodes, nDim, nNodes > k_UU( 0.0 );
+    Tensor< double, 1, nNodes, 1, nNodes >       k_AA( 0.0 );
+    Tensor< double, nDim, nNodes, 1, nNodes >    k_UA( 0.0 );
+    Tensor< double, 1, nNodes, nDim, nNodes >    k_AU( 0.0 );
 
     Eigen::Map< Eigen::VectorXd > rhs( rightHandSide, sizeLoadVector );
 
@@ -537,11 +546,17 @@ namespace Marmot::Elements {
 
       using namespace Marmot::FastorIndices;
 
+      auto N_ = this->N( qp.xi );
+
       const auto& dNdX_ = qp.dNdX;
 
+      const auto N    = Tensor< double, nNodes >( N_.data(), ColumnMajor );
       const auto dNdX = Tensor< double, nDim, nNodes >( dNdX_.data(), ColumnMajor );
 
       const auto F_np = evaluate( einsum< Ai, jA >( qU_np, dNdX ) + I );
+      const auto F_n  = evaluate( einsum< Ai, jA >( qU_n, dNdX ) + I );
+
+      const double nonlocalField = inner_product( N, qA_np );
 
       const Material::Deformation< nDim > deformation = { F_np };
 
