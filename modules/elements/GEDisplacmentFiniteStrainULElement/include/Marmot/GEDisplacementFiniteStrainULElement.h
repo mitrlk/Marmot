@@ -527,8 +527,10 @@ namespace Marmot::Elements {
     const auto qA_np = TensorMap< const double, nNodes, 1 >( qTotal + idxA );
 
     const auto dQU = TensorMap< const double, nNodes, nDim >( dQ );
+    const auto dQA = TensorMap< const double, nNodes, 1 >( dQ + idxA );
 
     const auto qU_n = evaluate( qU_np - dQU );
+    const auto qA_n = evaluate( qA_np - dQA );
 
     // ... and out: residuals and stiffness
     TensorMap< double, nNodes, nDim > r_U( rightHandSide );
@@ -554,15 +556,14 @@ namespace Marmot::Elements {
       const auto dNdX = Tensor< double, nDim, nNodes >( dNdX_.data(), ColumnMajor );
 
       const auto F_np = evaluate( einsum< Ai, jA >( qU_np, dNdX ) + I );
-      const auto F_n  = evaluate( einsum< Ai, jA >( qU_n, dNdX ) + I );
 
-      const double nonlocalField = inner_product( N, qA_np );
+      const double A_np = inner_product( N, qA_np );
+      const double dA   = inner_product( N, dQA );
+      const double A_n  = A_np - dA;
 
       const Material::Deformation< nDim > deformation = { F_np };
 
       const Material::TimeIncrement timeIncrement{ time[0], dT };
-
-      const Material::NonlocalField< nDim > nonlocal = { nonlocalField }; // dummy for now
 
       Material::ConstitutiveResponse< nDim > response;
       Material::AlgorithmicModuli< nDim >    tangents;
@@ -597,10 +598,18 @@ namespace Marmot::Elements {
             else
               qp.material->computePlaneStrain( response3D, algorithmicModuli3D, deformation3D, timeIncrement );
 
-            response = { reduceTo2D< U, U >( response3D.tau ), response3D.rho, response3D.elasticEnergyDensity };
+            response = { reduceTo2D< U, U >( response3D.tau ),
+                         response3D.rho,
+                         response3D.elasticEnergyDensity,
+                         response3D.A_n,
+                         dA,
+                         response3D.nonlocalradius,
+                         response3D.L };
 
             tangents = {
-              reduceTo2D< U, U, U, U >( algorithmicModuli3D.dTau_dF ),
+              reduceTo2D< U, U, U, U >( algorithmicModuli3D.dTau_dF,
+                                        algorithmicModuli3D.dTau_dA,
+                                        algorithmicModuli3D.dL_dF ),
             };
 
             qp.managedStateVars->stress = Marmot::mapEigenToFastor( response3D.tau ).reshaped();
@@ -625,22 +634,30 @@ namespace Marmot::Elements {
 
       const double& J0xW = qp.J0xW;
 
-      const auto& tau = response.tau;
+      const auto& tau            = response.tau;
+      const auto& nonlocalField  = response.A_n;
+      const auto& dnonlocalField = response.dA;
+      const auto& localField     = response.L;
+      const auto& l              = response.nonlocalradius;
 
       const auto& t = tangents;
 
       // aux stiffness tensors
       const auto dTau_dqU = evaluate( +einsum< ijkl, lB >( t.dTau_dF, dNdX ) );
+      const auto dTau_dqA = evaluate( +einsum< ij, B >( t.dTau_dA, N ) );
+      const auto dL_dqU   = evaluate( +einsum< ijkl, lB >( t.dL_dF, dNdX ) );
 
       // r[ node, dim ] (swap to abuse directly colmajor layout)
       // directly operate via TensorMap
       r_U -= ( +einsum< iA, ij >( dNdx, tau ) ) * J0xW;
+      r_A -= ( N * nonlocalField + l * l * einsum< iA, iB, B >( dNdX, dNdX, qN_np ) - N * localField ) * J0xW;
 
       // K [dim, node, dim, node ]
       k_UU += ( +einsum< iA, ijkB, to_jAkB >( dNdx, dTau_dqU ) ) * J0xW;
 
       // geometric contribution
       k_UU += ( -einsum< kA, ij, iB, to_jAkB >( dNdx, tau, dNdx ) ) * J0xW;
+      k_UA += ()
     }
     // copy back to the subblocks using mighty Eigen block access,
     // note the layout swap rowmajor -> colmajor
