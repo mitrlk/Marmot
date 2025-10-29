@@ -562,6 +562,8 @@ namespace Marmot::Elements {
 
       const Material::TimeIncrement timeIncrement{ time[0], dT };
 
+      const Material::NonlocalField< nDim > nonlocal = { nonlocalField }; // dummy for now
+
       Material::ConstitutiveResponse< nDim > response;
       Material::AlgorithmicModuli< nDim >    tangents;
       try {
