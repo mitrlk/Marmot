@@ -602,14 +602,14 @@ namespace Marmot::Elements {
                          response3D.rho,
                          response3D.elasticEnergyDensity,
                          response3D.A_n,
-                         dA,
+                         response3D.dA,
                          response3D.nonlocalradius,
                          response3D.L };
 
             tangents = {
-              reduceTo2D< U, U, U, U >( algorithmicModuli3D.dTau_dF,
-                                        algorithmicModuli3D.dTau_dA,
-                                        algorithmicModuli3D.dL_dF ),
+              reduceTo2D< U, U, U, U >( algorithmicModuli3D.dTau_dF ),
+              reduceTo2D< U, U >( algorithmicModuli3D.dTau_dA ),
+              reduceTo2D< U, U >( algorithmicModuli3D.dL_dF ),
             };
 
             qp.managedStateVars->stress = Marmot::mapEigenToFastor( response3D.tau ).reshaped();
@@ -650,14 +650,15 @@ namespace Marmot::Elements {
       // r[ node, dim ] (swap to abuse directly colmajor layout)
       // directly operate via TensorMap
       r_U -= ( +einsum< iA, ij >( dNdx, tau ) ) * J0xW;
-      r_A -= ( N * nonlocalField + l * l * einsum< iA, iB, B >( dNdX, dNdX, qN_np ) - N * localField ) * J0xW;
+      r_A -= ( N * nonlocalField + l * l * einsum< iA, iB, B >( dNdX, dNdX, qA_np ) - N * localField ) * J0xW;
 
       // K [dim, node, dim, node ]
       k_UU += ( +einsum< iA, ijkB, to_jAkB >( dNdx, dTau_dqU ) ) * J0xW;
-
+      k_UA += ( +einsum< iA, ijB, to_jAB >( dNdx, dTau_dqA ) ) * J0xW;
+      k_AU += ( -einsum< A, kB >( N, dL_dqU ) ) * J0xW;
+      k_AA += ( +einsum< A, B >( N, N ) + l * l * einsum< iA, iB >( dNdX, dNdX ) ) * J0xW;
       // geometric contribution
       k_UU += ( -einsum< kA, ij, iB, to_jAkB >( dNdx, tau, dNdx ) ) * J0xW;
-      k_UA += ()
     }
     // copy back to the subblocks using mighty Eigen block access,
     // note the layout swap rowmajor -> colmajor
@@ -668,6 +669,9 @@ namespace Marmot::Elements {
     Map< KSizedMatrix > K( stiffnessMatrix );
 
     K.template block< bsU, bsU >( idxU, idxU ) += Map< Matrix< double, bsU, bsU > >( torowmajor( k_UU ).data() );
+    K.template block< bsU, bsA >( idxU, idxA ) += Map< Matrix< double, bsU, bsA > >( torowmajor( k_UA ).data() );
+    K.template block< bsA, bsU >( idxA, idxU ) += Map< Matrix< double, bsA, bsU > >( torowmajor( k_AU ).data() );
+    K.template block< bsA, bsA >( idxA, idxA ) += Map< Matrix< double, bsA, bsA > >( torowmajor( k_AA ).data() );
   }
 
   template < int nDim, int nNodes >
@@ -855,6 +859,7 @@ namespace Marmot::Elements {
 
     using Parent              = GEDisplacementFiniteStrainULElement< 2, nNodes >;
     const auto idxU           = Parent::idxU;
+    const auto idxA           = Parent::idxA;
     const auto sizeLoadVector = GEDisplacementFiniteStrainULElement< 2, nNodes >::sizeLoadVector;
     using Material            = MarmotMaterialFiniteStrain;
 
@@ -865,12 +870,20 @@ namespace Marmot::Elements {
 
     // in  ...
     const auto qU_np = TensorMap< const double, nNodes, nDim >( qTotal );
+    const auto dQU   = TensorMap< const double, nNodes, nDim >( dQ );
+
+    const auto qA_np = TensorMap< const double, nNodes, 1 >( qTotal + idxA );
+    const auto dQA   = TensorMap< const double, nNodes, 1 >( dQ + idxA );
 
     // ... and out: residuals and stiffness
     TensorMap< double, nNodes, nDim > r_U( rightHandSide );
+    TensorMap< double, nNodes, 1 >    r_A( rightHandSide + idxA );
 
     // temporary stiffness matrices, which are assembled into the large one at the end of the method
     Tensor< double, nDim, nNodes, nDim, nNodes > k_UU( 0.0 );
+    Tensor< double, 1, nNodes, 1, nNodes >       k_AA( 0.0 );
+    Tensor< double, nDim, nNodes, 1, nNodes >    k_UA( 0.0 );
+    Tensor< double, 1, nNodes, nNodes, nDim >    k_AU( 0.0 );
 
     Eigen::Map< Eigen::VectorXd > rhs( rightHandSide, sizeLoadVector );
 
@@ -890,6 +903,9 @@ namespace Marmot::Elements {
       const auto u_np = evaluate( einsum< A, Ai >( N, qU_np ) );
 
       const auto F_np = evaluate( einsum< Ai, jA >( qU_np, dNdX ) + I );
+
+      const auto A_np = inner_product( N, qA_np );
+      const auto dA   = inner_product( N, dQA );
 
       const Material::Deformation< nDim > deformation = {
         F_np,
@@ -919,11 +935,17 @@ namespace Marmot::Elements {
         pNewDT = 0.25;
         return;
       }
-      response = { reduceTo2D< U, U >( response3D.tau ), response3D.rho, response3D.elasticEnergyDensity };
+      response = { reduceTo2D< U, U >( response3D.tau ),
+                   response3D.rho,
+                   response3D.elasticEnergyDensity,
+                   response3D.A_n,
+                   response3D.dA,
+                   response3D.nonlocalradius,
+                   response3D.L };
 
-      tangents = {
-        reduceTo2D< U, U, U, U >( algorithmicModuli3D.dTau_dF ),
-      };
+      tangents = { reduceTo2D< U, U, U, U >( algorithmicModuli3D.dTau_dF ),
+                   reduceTo2D< U, U >( algorithmicModuli3D.dTau_dA ),
+                   reduceTo2D< U, U >( algorithmicModuli3D.dL_dF ) };
 
       qp.managedStateVars->stress = Marmot::mapEigenToFastor( response3D.tau ).reshaped();
 
@@ -931,12 +953,18 @@ namespace Marmot::Elements {
 
       const double J0xWxRx2Pi = qp.J0xW * 2 * Constants::Pi * r;
 
-      const auto& tau = response.tau;
+      const auto& tau            = response.tau;
+      const auto& nonlocalField  = response.A_n;
+      const auto& dnonlocalField = response.dA;
+      const auto& localField     = response.L;
+      const auto& l              = response.nonlocalradius;
 
       const auto& t = tangents;
 
       // aux stiffness tensors
-      auto dTau_dqU = evaluate( +einsum< ijkl, lB >( t.dTau_dF, dNdX ) );
+      auto       dTau_dqU = evaluate( +einsum< ijkl, lB >( t.dTau_dF, dNdX ) );
+      const auto dTau_dqA = evaluate( +einsum< ij, B >( t.dTau_dA, N ) );
+      const auto dL_dqU   = evaluate( +einsum< ijkl, lB >( t.dL_dF, dNdX ) );
 
       Fastor::Tensor< double, 2, 2 > dTau33_dF_2D( 0.0 );
       for ( int i = 0; i < 2; i++ )
@@ -951,6 +979,7 @@ namespace Marmot::Elements {
         for ( int i = 0; i < 2; i++ )
           for ( int j = 0; j < 2; j++ ) {
             dTau_dqU( i, j, 0, B ) += algorithmicModuli3D.dTau_dF( i, j, 2, 2 ) * N( B ) / r;
+            dL_dqU( 0, B ) += algorithmicModuli3D.dL_dF( 2, 2 ) * N( B ) / r;
           }
         dTau33_dqU( 0, B ) += algorithmicModuli3D.dTau_dF( 2, 2, 2, 2 ) * N( B ) / r;
       }
@@ -958,6 +987,7 @@ namespace Marmot::Elements {
       // r[ node, dim ] (swap to abuse directly colmajor layout)
       // directly operate via TensorMap
       r_U -= ( +einsum< iA, ij >( dNdx, tau ) ) * J0xWxRx2Pi;
+      r_A -= ( N * nonlocalField + l * l * einsum< iA, iB, B >( dNdX, dNdX, qA_np ) - N * localField ) * J0xWxRx2Pi;
 
       const double F33          = 1 + u_np[0] / r;
       const double invF33       = 1. / F33;
@@ -977,6 +1007,11 @@ namespace Marmot::Elements {
 
       // K [dim, node, dim, node ]
       k_UU += ( +einsum< iA, ijkB, to_jAkB >( dNdx, dTau_dqU ) ) * J0xWxRx2Pi;
+      k_UA += ( +einsum< iA, ijB, to_jAB >( dNdx, dTau_dqA ) ) * J0xWxRx2Pi;
+      k_AU += ( -einsum< A, kB >( N, dL_dqU ) ) * J0xWxRx2Pi;
+      k_AA += ( +einsum< A, B >( N, N ) + l * l * einsum< iA, iB >( dNdX, dNdX ) ) * J0xWxRx2Pi;
+
+      k_UU += ( -einsum< kA, ij, iB, to_jAkB >( dNdx, tau, dNdx ) ) * J0xWxRx2Pi;
     }
     // copy back to the subblocks using mighty Eigen block access,
     // note the layout swap rowmajor -> colmajor
@@ -988,6 +1023,12 @@ namespace Marmot::Elements {
 
     K.template block< Parent::bsU, Parent::bsU >( idxU, idxU ) += Map< Matrix< double, Parent::bsU, Parent::bsU > >(
       torowmajor( k_UU ).data() );
+    K.template block< Parent::bsU, Parent::bsA >( idxU, idxA ) += Map< Matrix< double, Parent::bsU, Parent::bsA > >(
+      torowmajor( k_UA ).data() );
+    K.template block< Parent::bsA, Parent::bsU >( idxA, idxU ) += Map< Matrix< double, Parent::bsA, Parent::bsU > >(
+      torowmajor( k_AU ).data() );
+    K.template block< Parent::bsA, Parent::bsA >( idxA, idxA ) += Map< Matrix< double, Parent::bsA, Parent::bsA > >(
+      torowmajor( k_AA ).data() );
   }
 
 } // namespace Marmot::Elements
