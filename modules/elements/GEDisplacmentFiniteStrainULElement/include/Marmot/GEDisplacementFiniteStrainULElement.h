@@ -36,7 +36,7 @@
 #include "Marmot/MarmotGeometryElement.h"
 #include "Marmot/MarmotGeostaticStress.h"
 #include "Marmot/MarmotJournal.h"
-#include "Marmot/MarmotMaterialFiniteStrain.h"
+#include "Marmot/MarmotMaterialGEFiniteStrain.h"
 #include "Marmot/MarmotMath.h"
 #include "Marmot/MarmotStateVarVectorManager.h"
 #include "Marmot/MarmotTensor.h"
@@ -88,7 +88,7 @@ namespace Marmot::Elements {
     /// @brief Parent element class for geometry related operations as, e.g., shape functions
     using ParentGeometryElement = MarmotGeometryElement< nDim, nNodes >;
     /// @brief Material class for finite strain material formulations
-    using Material = MarmotMaterialFiniteStrain;
+    using Material = MarmotMaterialGEFiniteStrain;
     /// @brief Sized matrix type used for Jacobian matrix (inherited from ParentGeometryElement)
     using JacobianSized = typename ParentGeometryElement::JacobianSized;
     /// @brief Sized matrix type used for shape function matrix (inherited from ParentGeometryElement)
@@ -515,7 +515,7 @@ namespace Marmot::Elements {
                                                                              double*       stiffnessMatrix,
                                                                              const double* time,
                                                                              double        dT,
-                                                                             double&       pNewDT )
+                                                                             double&       pNewdT )
   {
     using namespace Fastor;
 
@@ -524,13 +524,7 @@ namespace Marmot::Elements {
 
     // in  ...
     const auto qU_np = TensorMap< const double, nNodes, nDim >( qTotal );
-    const auto qA_np = TensorMap< const double, nNodes, 1 >( qTotal + idxA );
-
-    const auto dQU = TensorMap< const double, nNodes, nDim >( dQ );
-    const auto dQA = TensorMap< const double, nNodes, 1 >( dQ + idxA );
-
-    const auto qU_n = evaluate( qU_np - dQU );
-    const auto qA_n = evaluate( qA_np - dQA );
+    const auto qA_np = TensorMap< const double, nNodes >( qTotal + idxA );
 
     // ... and out: residuals and stiffness
     TensorMap< double, nNodes, nDim > r_U( rightHandSide );
@@ -557,11 +551,9 @@ namespace Marmot::Elements {
 
       const auto F_np = evaluate( einsum< Ai, jA >( qU_np, dNdX ) + I );
 
-      const double A_np = inner_product( N, qA_np );
-      const double dA   = inner_product( N, dQA );
-      const double A_n  = A_np - dA;
+      const double A_np = inner( N, qA_np );
 
-      const Material::Deformation< nDim > deformation = { F_np };
+      const Material::Deformation< nDim > deformation = { F_np, A_np };
 
       const Material::TimeIncrement timeIncrement{ time[0], dT };
 
@@ -577,13 +569,13 @@ namespace Marmot::Elements {
             Material::ConstitutiveResponse< 3 >
               response3D{ FastorStandardTensors::Tensor33d( qp.managedStateVars->stress.data(), Fastor::ColumnMajor ),
                           -1.0,
-                          -1.0 };
+                          -1.0,
+                          0.0,
+                          0.0 };
 
             Material::AlgorithmicModuli< 3 > algorithmicModuli3D;
 
-            Material::Deformation< 3 > deformation3D{
-              expandTo3D( deformation.F ),
-            };
+            Material::Deformation< 3 > deformation3D{ expandTo3D( deformation.F ), deformation.A };
 
             deformation3D.F( 2, 2 ) = 1.0;
 
@@ -601,8 +593,6 @@ namespace Marmot::Elements {
             response = { reduceTo2D< U, U >( response3D.tau ),
                          response3D.rho,
                          response3D.elasticEnergyDensity,
-                         response3D.A_n,
-                         response3D.dA,
                          response3D.nonlocalradius,
                          response3D.L };
 
@@ -618,7 +608,9 @@ namespace Marmot::Elements {
         else {
           response = { Marmot::FastorStandardTensors::Tensor33d( qp.managedStateVars->stress.data(), ColumnMajor ),
                        -1.0,
-                       -1.0 };
+                       -1.0,
+                       0.0,
+                       0.0 };
 
           qp.material->computeStress( response, tangents, deformation, timeIncrement );
 
@@ -627,30 +619,28 @@ namespace Marmot::Elements {
         }
       }
       catch ( const std::runtime_error& ) {
-        pNewDT = 0.25;
+        pNewdT = 0.25;
         return;
       }
       const auto dNdx = evaluate( einsum< ji, jA >( inv( F_np ), dNdX ) );
 
       const double& J0xW = qp.J0xW;
 
-      const auto& tau            = response.tau;
-      const auto& nonlocalField  = response.A_n;
-      const auto& dnonlocalField = response.dA;
-      const auto& localField     = response.L;
-      const auto& l              = response.nonlocalradius;
+      const auto& tau        = response.tau;
+      const auto& localField = response.L;
+      const auto& l          = response.nonlocalradius;
 
       const auto& t = tangents;
 
       // aux stiffness tensors
       const auto dTau_dqU = evaluate( +einsum< ijkl, lB >( t.dTau_dF, dNdX ) );
       const auto dTau_dqA = evaluate( +einsum< ij, B >( t.dTau_dA, N ) );
-      const auto dL_dqU   = evaluate( +einsum< ijkl, lB >( t.dL_dF, dNdX ) );
+      const auto dL_dqU   = evaluate( +einsum< kl, lB >( t.dL_dF, dNdX ) );
 
       // r[ node, dim ] (swap to abuse directly colmajor layout)
       // directly operate via TensorMap
       r_U -= ( +einsum< iA, ij >( dNdx, tau ) ) * J0xW;
-      r_A -= ( N * nonlocalField + l * l * einsum< iA, iB, B >( dNdX, dNdX, qA_np ) - N * localField ) * J0xW;
+      r_A -= ( N * A_np + l * l * einsum< iA, iB, B >( dNdX, dNdX, qA_np ) - N * localField ) * J0xW;
 
       // K [dim, node, dim, node ]
       k_UU += ( +einsum< iA, ijkB, to_jAkB >( dNdx, dTau_dqU ) ) * J0xW;
@@ -853,7 +843,7 @@ namespace Marmot::Elements {
                                                                                    double*       stiffnessMatrix,
                                                                                    const double* time,
                                                                                    double        dT,
-                                                                                   double&       pNewDT )
+                                                                                   double&       pNewdT )
   {
     constexpr int nDim = 2;
 
@@ -861,7 +851,7 @@ namespace Marmot::Elements {
     const auto idxU           = Parent::idxU;
     const auto idxA           = Parent::idxA;
     const auto sizeLoadVector = GEDisplacementFiniteStrainULElement< 2, nNodes >::sizeLoadVector;
-    using Material            = MarmotMaterialFiniteStrain;
+    using Material            = MarmotMaterialGEFiniteStrain;
 
     using namespace Fastor;
 
@@ -870,10 +860,8 @@ namespace Marmot::Elements {
 
     // in  ...
     const auto qU_np = TensorMap< const double, nNodes, nDim >( qTotal );
-    const auto dQU   = TensorMap< const double, nNodes, nDim >( dQ );
 
-    const auto qA_np = TensorMap< const double, nNodes, 1 >( qTotal + idxA );
-    const auto dQA   = TensorMap< const double, nNodes, 1 >( dQ + idxA );
+    const auto qA_np = TensorMap< const double, nNodes >( qTotal + idxA );
 
     // ... and out: residuals and stiffness
     TensorMap< double, nNodes, nDim > r_U( rightHandSide );
@@ -883,7 +871,7 @@ namespace Marmot::Elements {
     Tensor< double, nDim, nNodes, nDim, nNodes > k_UU( 0.0 );
     Tensor< double, 1, nNodes, 1, nNodes >       k_AA( 0.0 );
     Tensor< double, nDim, nNodes, 1, nNodes >    k_UA( 0.0 );
-    Tensor< double, 1, nNodes, nNodes, nDim >    k_AU( 0.0 );
+    Tensor< double, 1, nNodes, nDim, nNodes >    k_AU( 0.0 );
 
     Eigen::Map< Eigen::VectorXd > rhs( rightHandSide, sizeLoadVector );
 
@@ -904,12 +892,9 @@ namespace Marmot::Elements {
 
       const auto F_np = evaluate( einsum< Ai, jA >( qU_np, dNdX ) + I );
 
-      const auto A_np = inner_product( N, qA_np );
-      const auto dA   = inner_product( N, dQA );
+      const auto A_np = inner( N, qA_np );
 
-      const Material::Deformation< nDim > deformation = {
-        F_np,
-      };
+      const Material::Deformation< nDim > deformation = { F_np, A_np };
 
       const Material ::TimeIncrement timeIncrement{ time[0], dT };
 
@@ -920,11 +905,13 @@ namespace Marmot::Elements {
       Material::ConstitutiveResponse< 3 >
         response3D{ FastorStandardTensors::Tensor33d( qp.managedStateVars->stress.data(), Fastor::ColumnMajor ),
                     -1.0,
-                    -1.0 };
+                    -1.0,
+                    0.0,
+                    0.0 };
 
       Material::AlgorithmicModuli< 3 > algorithmicModuli3D;
 
-      Material::Deformation< 3 > deformation3D{ expandTo3D( deformation.F ) };
+      Material::Deformation< 3 > deformation3D{ expandTo3D( deformation.F ), deformation.A };
 
       deformation3D.F( 2, 2 ) = 1 + u_np[0] / r;
 
@@ -932,14 +919,12 @@ namespace Marmot::Elements {
         qp.material->computePlaneStrain( response3D, algorithmicModuli3D, deformation3D, timeIncrement );
       }
       catch ( const std::runtime_error& ) {
-        pNewDT = 0.25;
+        pNewdT = 0.25;
         return;
       }
       response = { reduceTo2D< U, U >( response3D.tau ),
                    response3D.rho,
                    response3D.elasticEnergyDensity,
-                   response3D.A_n,
-                   response3D.dA,
                    response3D.nonlocalradius,
                    response3D.L };
 
@@ -953,18 +938,16 @@ namespace Marmot::Elements {
 
       const double J0xWxRx2Pi = qp.J0xW * 2 * Constants::Pi * r;
 
-      const auto& tau            = response.tau;
-      const auto& nonlocalField  = response.A_n;
-      const auto& dnonlocalField = response.dA;
-      const auto& localField     = response.L;
-      const auto& l              = response.nonlocalradius;
+      const auto& tau        = response.tau;
+      const auto& localField = response.L;
+      const auto& l          = response.nonlocalradius;
 
       const auto& t = tangents;
 
       // aux stiffness tensors
       auto       dTau_dqU = evaluate( +einsum< ijkl, lB >( t.dTau_dF, dNdX ) );
       const auto dTau_dqA = evaluate( +einsum< ij, B >( t.dTau_dA, N ) );
-      const auto dL_dqU   = evaluate( +einsum< ijkl, lB >( t.dL_dF, dNdX ) );
+      auto       dL_dqU   = evaluate( +einsum< kl, lB >( t.dL_dF, dNdX ) );
 
       Fastor::Tensor< double, 2, 2 > dTau33_dF_2D( 0.0 );
       for ( int i = 0; i < 2; i++ )
@@ -987,7 +970,7 @@ namespace Marmot::Elements {
       // r[ node, dim ] (swap to abuse directly colmajor layout)
       // directly operate via TensorMap
       r_U -= ( +einsum< iA, ij >( dNdx, tau ) ) * J0xWxRx2Pi;
-      r_A -= ( N * nonlocalField + l * l * einsum< iA, iB, B >( dNdX, dNdX, qA_np ) - N * localField ) * J0xWxRx2Pi;
+      r_A -= ( N * A_np + l * l * einsum< iA, iB, B >( dNdX, dNdX, qA_np ) - N * localField ) * J0xWxRx2Pi;
 
       const double F33          = 1 + u_np[0] / r;
       const double invF33       = 1. / F33;
